@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex,nofollow">
+<title>Expense Dashboard</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='1' y='8' width='3' height='7' rx='1' fill='%232a78d6'/%3E%3Crect x='6.5' y='4' width='3' height='11' rx='1' fill='%232a78d6'/%3E%3Crect x='12' y='1' width='3' height='14' rx='1' fill='%23eb6834'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Expense dashboard</h1>
+      <p class="lede" id="sub">Reads your Monthly Expense Tracking sheet.</p>
+    </div>
+    <div class="controls">
+      <div class="seg" role="group" aria-label="Period type">
+        <button type="button" id="m-cycle" data-mode="cycle" aria-pressed="true">Payday cycle</button>
+        <button type="button" id="m-month" data-mode="month" aria-pressed="false">Calendar month</button>
+      </div>
+      <button type="button" class="btn" id="signin" hidden>Sign in with Google</button>
+      <button type="button" class="btn" id="refresh" hidden>Refresh</button>
+      <button type="button" class="btn" id="signout" hidden>Sign out</button>
+    </div>
+  </header>
+  <div class="status" id="status" role="status" aria-live="polite">Loading…</div>
+  <nav class="chips" id="chips" aria-label="Period"></nav>
+  <main id="main" style="display:flex;flex-direction:column;gap:18px"></main>
+  <footer class="notes" id="notes"></footer>
+</div>
+<div id="tip" role="tooltip"></div>
+<script src="config.js"></script>
+<script src="logic.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
