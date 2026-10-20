@@ -103,7 +103,8 @@
     t.innerHTML='<span class="toast-msg">'+esc(msg)+'</span>'+(actions||[]).map(function(a,i){return '<button type="button" data-i="'+i+'">'+esc(a.label)+'</button>';}).join('')+'<button type="button" class="toast-x" aria-label="Dismiss">×</button>';
     $$('button',t).forEach(function(b){
       b.onclick=function(){
-        var a=(actions||[])[+b.getAttribute('data-i')];
+        // Only buttons with data-i are actions; the \u00d7 button just dismisses.
+        var i=b.getAttribute('data-i'),a=i==null?null:(actions||[])[+i];
         hideToast();
         if(a) a.run();
       };
@@ -122,7 +123,7 @@
   // =====================================================================
   var F,mem={by:{},top:[]};
   function freshForm(keep){
-    F={dir:'out',amount:'',name:'',desc:'',cat:null,mode:keep&&keep.mode||'Sadapay',other:'',date:keep&&keep.date||karachi(0),touched:{}};
+    F={dir:'out',amount:'',name:'',desc:'',cat:null,mode:keep&&keep.mode||'Sadapay',other:'',date:keep&&keep.date||karachi(0),adjust:true,touched:{}};
   }
   function openAdd(){
     mem=memory();
@@ -148,6 +149,20 @@
   function amountNum(){var n=Logic.num(F.amount);return isNaN(n)?NaN:Math.abs(n);}
   function signed(){var n=amountNum();return F.dir==='in'?-n:n;}
   function modeValue(){return F.mode==='Other'?F.other.trim():F.mode;}
+  // The account this entry moves: spending lowers it, money in raises it, as in the
+  // sheet's offset check. Savings rows ("Pay myself") are already counted, so skip them.
+  function adjustment(rows){
+    var acct=Logic.normMode(modeValue());
+    if(['ABL','Sadapay','Cash'].indexOf(acct)<0) return {skip:'Only ABL, Sadapay and Cash balances are kept in column G.'};
+    if(F.cat==='savings') return {skip:'Savings rows do not change the balances.'};
+    var hs=headings(rows);
+    if(!hs.length) return null;
+    var b=blocks(rows).filter(function(x){return x.head===hs[hs.length-1]+1;})[0];
+    var a=b&&b.acc[acct];
+    if(!a) return {skip:'This month has no '+acct+' row in column G.'};
+    var n=signed();
+    return {acct:acct,row:a.row,old:a.value,next:isNaN(n)?a.value:a.value-n,cycle:b.name};
+  }
   function problems(){
     var p=[];
     var n=amountNum();
@@ -180,7 +195,8 @@
         (descs.length?'<div class="picks">'+descs.map(function(d){return '<button type="button" class="pick soft" data-desc="'+esc(d)+'">'+esc(d)+'</button>';}).join('')+'</div>':'')+'</div>'+
       '<div class="fld"><span class="lbl">Category</span><div class="picks">'+pickHTML('cat',CATS,F.cat)+'</div></div>'+
       '<div class="fld"><span class="lbl">Paid with</span><div class="picks">'+pickHTML('mode',MODES.concat(['Other']),F.mode)+
-        (F.mode==='Other'?'<input id="f-other" class="inline" autocomplete="off" placeholder="payment mode" value="'+esc(F.other)+'">':'')+'</div></div>'+
+        (F.mode==='Other'?'<input id="f-other" class="inline" autocomplete="off" placeholder="payment mode" value="'+esc(F.other)+'">':'')+'</div>'+
+        '<div id="adjust-box"></div></div>'+
       '<div class="fld"><span class="lbl">Date</span><div class="picks">'+
         '<button type="button" class="pick" data-date="'+today+'" aria-pressed="'+(F.date===today)+'">Today</button>'+
         '<button type="button" class="pick" data-date="'+yest+'" aria-pressed="'+(F.date===yest)+'">Yesterday</button>'+
@@ -198,6 +214,14 @@
     var cells=[F.name.trim()||'…',n>0?sheetAmt(signed()):'…',F.desc.trim()||'–',toSheetDate(F.date)||'…',modeValue()||'…',F.cat||'…'];
     r.innerHTML='<div class="r-h">'+(pl?'Goes into <b>'+esc(pl.cycle)+'</b>, row '+pl.row:'Goes after your last entry')+'</div>'+
       '<div class="r-row">'+cells.map(function(c,i){return '<span'+(i===1?' class="r-n'+(F.dir==='in'?' in':'')+'"':'')+'>'+esc(c)+'</span>';}).join('')+'</div>';
+    var box=$('#adjust-box');
+    if(box){
+      var adj=adjustment(L.S.tracking||[]);
+      if(!adj) box.innerHTML='';
+      else if(adj.skip) box.innerHTML='<div class="adjust off"><span>'+esc(adj.skip)+'</span></div>';
+      else box.innerHTML='<label class="adjust'+(F.adjust?'':' off')+'"><input type="checkbox" id="f-adjust"'+(F.adjust?' checked':'')+'><span>Also update '+esc(adj.acct)+' in column G</span>'+
+        '<b>'+esc(group(adj.old))+(n>0&&F.adjust?' \u2192 <span class="to">'+esc((adj.next<0?'\u2212':'')+group(adj.next))+'</span>':'')+'</b></label>';
+    }
     var p=problems(),btn=$('#add-save');
     btn.disabled=!!p.length||saving;
     $('#add-hint').textContent=p.length?'Still needed: '+p.join(', ')+'.':(L.hasToken()?'':'You will be asked to sign in with Google first.');
@@ -208,26 +232,42 @@
     if(saving||problems().length) return;
     var row=[F.name.trim(),signed(),F.desc.trim(),toSheetDate(F.date),modeValue(),F.cat];
     var keep={mode:F.mode,date:F.date};
+    var wantAdjust=F.adjust;
     saving=true;setBusy('#add-save',true,'Adding…');
+    var pl,adj=null,adjNote='';
     needToken().then(function(){
       // Read the sheet fresh so the row goes after entries added anywhere else.
       return L.get('Tracking!A1:G5000');
     }).then(function(rows){
-      var pl=placement(rows);
+      pl=placement(rows);
       if(!pl) throw Object.assign(new Error('No month heading found in column A of the Tracking tab.'),{code:'layout'});
+      var a=wantAdjust?adjustment(rows):null;
+      if(a&&!a.skip) adj=a;
       var range='Tracking!A'+pl.row+':F'+pl.row;
       return L.put(range,[row]).then(function(){return L.get(range);}).then(function(back){
         var b=back[0]||[];
         if(cell(b,0)!==row[0]||Math.abs(Logic.num(b[1])-row[1])>0.001) throw Object.assign(new Error('The row was written but did not read back as expected. Check row '+pl.row+' in the sheet.'),{code:'verify'});
-        return pl;
       });
-    }).then(function(pl){
+    }).then(function(){
+      if(!adj) return;
+      var g='Tracking!G'+adj.row;
+      // Never overwrite a formula someone put in a balance cell.
+      return L.get(g,'FORMULA').then(function(f){
+        var v=(f[0]||[])[0];
+        if(typeof v==='string'&&v.charAt(0)==='='){adjNote=' '+adj.acct+' in column G is a formula, so it was left as it is.';adj=null;return;}
+        return L.batch([{range:g,values:[[adj.next]]}]).then(function(){return L.get(g,'UNFORMATTED_VALUE');}).then(function(back){
+          var v2=(back[0]||[])[0];
+          if(Math.abs(+v2-adj.next)>0.001){adjNote=' '+adj.acct+' did not read back as expected; check G'+adj.row+'.';adj=null;return;}
+          adjNote=' '+adj.acct+' '+group(adj.old)+' \u2192 '+(adj.next<0?'\u2212':'')+group(adj.next)+'.';
+        });
+      }).catch(function(e){adjNote=' The entry is in, but '+adj.acct+' could not be updated ('+fail(e)+')';adj=null;});
+    }).then(function(){
       saving=false;setBusy('#add-save',false,'Add entry');
       L.refresh();
-      var label=row[0]+' · '+(row[1]<0?'+':'')+fmt(Math.abs(row[1]));
-      var acts=[{label:'Undo',run:function(){undoEntry(pl,row);}}];
-      if(MODES.indexOf(row[4])>=0) acts.push({label:'Update '+row[4],run:function(){openBal(pl.cycle,row[4]);}});
-      toast('Added '+label+' to '+pl.cycle+', row '+pl.row+'.',acts);
+      var label=row[0]+' \u00b7 '+(row[1]<0?'+':'')+fmt(Math.abs(row[1]));
+      var done={pl:pl,row:row,adj:adj};
+      var acts=[{label:'Undo',run:function(){undoEntry(done);}},{label:'Balances',run:function(){openBal(pl.cycle,adj?adj.acct:null);}}];
+      toast('Added '+label+' to '+pl.cycle+', row '+pl.row+'.'+adjNote,acts);
       if(again){freshForm(keep);mem=memory();drawAdd();$('#f-amount').focus();}
       else $('#add-dlg').close();
     }).catch(function(e){
@@ -236,17 +276,23 @@
       $('#add-hint').classList.add('bad');
     });
   }
-  function undoEntry(pl,row){
+  function undoEntry(done){
+    var pl=done.pl,row=done.row,adj=done.adj,note='';
     needToken().then(function(){return L.get('Tracking!A1:G5000');}).then(function(rows){
       var r=rows[pl.row-1]||[];
       var still=cell(r,0)===row[0]&&Math.abs(Logic.num(r[1])-row[1])<0.001&&cell(r,3)===row[3];
       var later=rows.slice(pl.row).some(filled);
       if(!still) throw Object.assign(new Error('Row '+pl.row+' has changed since it was added, so it was left alone.'),{code:'undo'});
       if(later) throw Object.assign(new Error('Entries were added after row '+pl.row+'. Remove it in the sheet so no gap is left.'),{code:'undo'});
-      return L.clear('Tracking!A'+pl.row+':F'+pl.row);
+      return L.clear('Tracking!A'+pl.row+':F'+pl.row).then(function(){
+        if(!adj) return;
+        var now=numOr0(cell(rows[adj.row-1],6));
+        if(Math.abs(now-adj.next)>0.001){note=' '+adj.acct+' was changed since, so it was left at '+group(now)+'.';return;}
+        return L.batch([{range:'Tracking!G'+adj.row,values:[[adj.old]]}]).then(function(){note=' '+adj.acct+' is back to '+group(adj.old)+'.';});
+      });
     }).then(function(){
       L.refresh();
-      toast('Removed '+row[0]+' from row '+pl.row+'.');
+      toast('Removed '+row[0]+' from row '+pl.row+'.'+note);
     }).catch(function(e){toast(e&&e.code==='undo'?e.message:fail(e));});
   }
 
@@ -370,6 +416,7 @@
     if(!t) return;
     if(t.id==='add'||t.id==='fab') return openAdd();
     if(t.id==='bal') return openBal();
+    if(t.hasAttribute('data-open-bal')) return openBal(t.getAttribute('data-open-bal'));
     if(t.matches('[data-close]')){t.closest('dialog').close();return;}
     var inAdd=t.closest('#add-dlg'),inBal=t.closest('#bal-dlg');
     if(inAdd){
@@ -402,6 +449,7 @@
       else drawReceipt();
     }else if(t.id==='f-desc'){F.desc=t.value;drawReceipt();}
     else if(t.id==='f-other'){F.other=t.value;drawReceipt();}
+    else if(t.id==='f-adjust'){F.adjust=t.checked;drawReceipt();}
     else if(t.id==='f-date'){F.date=t.value;$$('[data-date]').forEach(function(b){b.setAttribute('aria-pressed',String(b.getAttribute('data-date')===F.date));});drawReceipt();}
     else if(t.hasAttribute&&t.hasAttribute('data-acct')){B.vals[t.getAttribute('data-acct')]=t.value;drawBalTotals();}
   });

@@ -30,6 +30,7 @@ const Logic=(function(){
     function after(label){
       for(var i=0;i<g.length-1;i++){
         if(g[i].toLowerCase().replace(/:$/,'')===label){
+          if(String(g[i+1]).trim()==='-') return 0;
           var v=num(g[i+1]);
           return isNaN(v)?null:v;
         }
@@ -37,7 +38,16 @@ const Logic=(function(){
       return null;
     }
     var r=after('remaining');
-    return r==null?null:{remaining:r,start:after('month start'),spent:after('spent')};
+    if(r==null) return null;
+    // Account balances and the sheet's own reconciliation: offset = (Total - savings) - Remaining.
+    var acc={};
+    [['ABL','abl'],['Sadapay','sadapay'],['Cash','cash'],['At home','at home']].forEach(function(x){
+      var v=after(x[1]);
+      if(v==null&&x[1]==='sadapay') v=after('sada pay');
+      if(v!=null) acc[x[0]]=v;
+    });
+    return {remaining:r,start:after('month start'),spent:after('spent'),acc:acc,
+      total:after('total'),net:after('total - savings'),offset:after('offset')};
   }
   // "Sada Pay", "sadapay" and "Sadapay" are the same account.
   function normMode(m){

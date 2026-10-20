@@ -29,6 +29,12 @@ Pages at **https://ahadgitit.github.io/ledger/**.
     read back to check it landed, and **Undo** clears it again.
   - Amounts are written as numbers, money in as a negative number, and dates as
     `dd/mm/yyyy` text, the same as rows typed by hand.
+  - The entry also updates its account in column G: spending lowers it, money in raises
+    it, and savings rows are left alone. This keeps the sheet's offset at 0. You can untick
+    this on the form.
+- The **Accounts** card shows ABL, Sadapay and Cash and compares what your accounts hold
+  with what your entries say. The difference is the sheet's offset (`(Total - savings) - Remaining`).
+  It shows **In sync** when they match and flags the gap when they don't.
 - **Balances** edits the ABL, Sadapay and Cash figures for any month. These are the cells
   under those labels in the month's column G block. Only those cells change, so Total and
   Remaining keep their formulas. **Undo** puts back exactly what was there, formulas included.

@@ -470,6 +470,44 @@
         '<div class="bud"><div><div class="eyebrow">Safe to spend</div><div class="bud-big">'+big+'</div><div class="bud-note'+(warn?' warn':'')+'">'+esc(note.replace(/<[^>]*>/g,''))+'</div>'+extra+'</div>'+
         '<div>'+bar+ledger+'</div></div></section>';
     })();
+    var acctHTML='';
+    (function(){
+      // Cycle mode shows the selected cycle's column G block; month mode shows the latest one.
+      var src=isCycle?cur:null,b=isCycle?bal:null;
+      if(!isCycle){
+        var cyc=Logic.cyclePeriods(Logic.parseTracking(S.tracking),Logic.todayNum());
+        for(var j=cyc.length-1;j>=0;j--) if(cyc[j].bal){src=cyc[j];b=cyc[j].bal;break;}
+      }
+      if(!b||!b.acc||!Object.keys(b.acc).length) return;
+      var names=Object.keys(b.acc).filter(function(k){return k!=='At home'||b.acc[k];});
+      var total=b.total!=null?b.total:names.reduce(function(s,k){return s+b.acc[k];},0);
+      var off=b.offset!=null?b.offset:(b.net!=null?b.net-b.remaining:null);
+      var ok=off!=null&&Math.abs(off)<1;
+      var expect=off!=null?total-off:null;
+      var tmax=Math.max.apply(null,names.map(function(k){return Math.abs(b.acc[k]);}).concat([1]));
+      var tiles=names.map(function(k){
+        var v=b.acc[k];
+        return '<div class="acc-tile"><span class="acc-n">'+esc(k)+'</span><span class="acc-v'+(v<0?' neg':'')+'">'+esc(fmtS(v))+'</span>'+
+          '<span class="acc-bar"><i style="width:'+(v>0?Math.max(2,v/tmax*100):0)+'%"></i></span></div>';
+      }).join('');
+      var status,why='';
+      if(off==null) status='<span class="sync-pill">No offset row</span>';
+      else if(ok) status='<span class="sync-pill ok"><b aria-hidden="true">\u2713</b> In sync</span>';
+      else{
+        status='<span class="sync-pill bad"><b aria-hidden="true">!</b> Off by '+esc(fmt(Math.abs(off)))+'</span>';
+        why=off>0?'Your accounts hold '+fmt(off)+' more than your entries explain. Usually an expense was logged without lowering its account, or money came in that is not logged yet.'
+          :'Your accounts hold '+fmt(-off)+' less than your entries say. Usually an expense is missing from the sheet, or a balance was not lowered after paying.';
+      }
+      acctHTML='<section class="panel acct-card'+(off!=null&&!ok?' off':'')+'"><div class="panel-h"><h2>Accounts</h2>'+status+'</div>'+
+        '<div class="acc-tiles">'+tiles+'</div>'+
+        (off!=null?'<dl class="recon">'+
+          '<div><dt>In your accounts</dt><dd>'+esc(fmtS(total))+'</dd></div>'+
+          '<div><dt>Your entries say</dt><dd>'+esc(fmtS(expect))+'</dd></div>'+
+          '<div class="diff'+(ok?' ok':' bad')+'"><dt>Difference</dt><dd>'+(ok?'Rs\u00a00':esc((off>0?'+':'\u2212')+fmtS(Math.abs(off))))+'</dd></div></dl>':'')+
+        (why?'<p class="recon-why">'+esc(why)+'</p>':'')+
+        '<div class="acct-foot"><span class="hint">'+esc(src.name)+' \u00b7 balances from column G of your Tracking tab</span>'+
+        '<button type="button" class="btn" data-open-bal="'+esc(src.name)+'">Update balances</button></div></section>';
+    })();
     var alertHTML='';
     if(bal&&bal.remaining<0){
       var figs=[];
@@ -485,6 +523,7 @@
       alertHTML+
       '<section class="hero" aria-label="Summary"><div><div class="eyebrow">Spent, '+esc(rangeText(cur))+'</div><div class="big">'+fmt(A.spent)+'</div><div class="delta">'+esc(delta)+'</div></div>'+
       '<dl class="stats">'+stats.map(function(s){return '<div><dt>'+esc(s[0])+'</dt><dd'+(s[2]?' class="'+s[2]+'"':'')+'>'+esc(s[1])+'</dd></div>';}).join('')+'</dl></section>'+
+      acctHTML+
       budgetHTML+
       '<section class="panel"><div class="panel-h"><h2>Where it went</h2><div class="legend"><span><i class="sw s1"></i>'+esc(cur.label)+'</span>'+(B?'<span><i class="sw s2"></i>'+esc(prev.label)+'</span>':'')+'</div></div>'+
         (catRows?'<ul class="cats">'+catRows+'</ul>':'<div class="empty">No spending recorded in this period yet.</div>')+'</section>'+
@@ -524,6 +563,7 @@
     n.push('<p>Spent adds Food, Utilities, Family/Home, Renovation, Transport, Shopping, Fun, Loans given and Untracked. Savings, transfers and money received back are kept out of it.</p>');
     if(bal) n.push('<p>Remaining comes from the balance notes in column G of your Tracking tab: what the cycle started with, minus Spent.</p>');
     if(subHTML) n.push('<p>Subscriptions and bills are picked out of the Expense and Description columns: Claude, internet, Amazon, foodpanda, YouTube and Netflix. A bill counts as still due when it was paid in an earlier period but not yet in this one, at the amount last paid. The due date repeats the day of the month it was last paid.</p>');
+    if(acctHTML) n.push('<p>Accounts: the ABL, Sadapay and Cash figures in column G. Your entries say is what should be left from the logged entries, and the difference is the offset row of your Tracking tab. Logging an entry here lowers or raises its account for you, so the two stay equal.</p>');
     if(rideHTML) n.push('<p>InDrive rides are rows named InDrive, or with InDrive in the description. The route comes from the description: "home to office", "to office" or "to api from home". Office trips are rides whose description mentions the office or says absent. Where you go most counts every ride with a destination.</p>');
     if(budgetHTML) n.push('<p>Daily spend limit: Remaining from column G of your Tracking tab, minus bills still due before payday, keeping '+Math.round(Logic.BUFFER*100)+'% back, divided by the days from today up to the day before the '+Logic.PAYDAY_DOM+'th. It covers all everyday spending, food or otherwise, from this one limit. It only appears for the current payday cycle.</p>');
     if(inc&&!isNaN(inc.spent)){
