@@ -22,6 +22,8 @@
         <button type="button" id="m-cycle" data-mode="cycle" aria-pressed="true">Payday cycle</button>
         <button type="button" id="m-month" data-mode="month" aria-pressed="false">Calendar month</button>
       </div>
+      <button type="button" class="btn primary" id="add" hidden><span aria-hidden="true">+</span> Add entry</button>
+      <button type="button" class="btn" id="bal" hidden>Balances</button>
       <button type="button" class="btn" id="signin" hidden>Sign in with Google</button>
       <button type="button" class="btn" id="refresh" hidden>Refresh</button>
       <button type="button" class="btn" id="signout" hidden>Sign out</button>
@@ -33,8 +35,35 @@
   <footer class="notes" id="notes"></footer>
 </div>
 <div id="tip" role="tooltip"></div>
+<button type="button" class="fab" id="fab" hidden aria-label="Add entry">+</button>
+<div class="toast" id="toast" role="status" aria-live="polite" popover="manual" hidden></div>
+<datalist id="names"></datalist>
+
+<dialog class="sheet" id="add-dlg" aria-labelledby="add-title">
+  <div class="sheet-in">
+    <header class="sheet-h"><h2 id="add-title">New entry</h2><button type="button" class="x" data-close aria-label="Close">&times;</button></header>
+    <div class="sheet-b" id="add-body"></div>
+    <footer class="sheet-f">
+      <label class="again"><input type="checkbox" id="add-again"> Add another</label>
+      <span class="hint-line" id="add-hint"></span>
+      <button type="button" class="btn primary" id="add-save" disabled>Add entry</button>
+    </footer>
+  </div>
+</dialog>
+
+<dialog class="sheet" id="bal-dlg" aria-labelledby="bal-title">
+  <div class="sheet-in">
+    <header class="sheet-h"><h2 id="bal-title">Account balances</h2><button type="button" class="x" data-close aria-label="Close">&times;</button></header>
+    <div class="sheet-b" id="bal-body"></div>
+    <footer class="sheet-f">
+      <span class="hint-line" id="bal-hint"></span>
+      <button type="button" class="btn primary" id="bal-save" disabled>Save balances</button>
+    </footer>
+  </div>
+</dialog>
 <script src="config.js"></script>
 <script src="logic.js"></script>
 <script src="app.js"></script>
+<script src="editor.js"></script>
 </body>
 </html>

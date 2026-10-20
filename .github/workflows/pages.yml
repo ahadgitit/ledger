@@ -23,14 +23,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check scripts parse
-        run: for f in config.js logic.js app.js; do node --check "$f"; done
+        run: for f in config.js logic.js app.js editor.js; do node --check "$f"; done
       - name: Collect site files
         run: |
           mkdir _site
-          cp index.html styles.css config.js logic.js app.js .nojekyll _site/
+          cp index.html styles.css config.js logic.js app.js editor.js .nojekyll _site/
           # Stamp asset URLs with the commit so browsers fetch new files after each deploy
           v="${GITHUB_SHA::7}"
-          sed -i -E "s#(href|src)=\"(styles\.css|config\.js|logic\.js|app\.js)\"#\1=\"\2?v=$v\"#g" _site/index.html
+          sed -i -E "s#(href|src)=\"(styles\.css|config\.js|logic\.js|app\.js|editor\.js)\"#\1=\"\2?v=$v\"#g" _site/index.html
           grep -c "?v=$v" _site/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

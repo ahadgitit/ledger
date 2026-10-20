@@ -10,8 +10,8 @@ Pages at **https://ahadgitit.github.io/ledger/**.
 
 ## How access works
 
-- You sign in with Google in the page. It asks only for read-only access to your sheets
-  (`spreadsheets.readonly`).
+- You sign in with Google in the page. It asks to see and edit your spreadsheets
+  (`spreadsheets`), so it can add entries and update balances as well as read.
 - The browser calls the Google Sheets API directly. No other server sees your data.
 - The sign-in token is kept in `sessionStorage`, so it goes away when you close the tab.
   Google tokens last one hour. After that, press **Sign in with Google** again.
@@ -19,6 +19,19 @@ Pages at **https://ahadgitit.github.io/ledger/**.
   **Sign out** revokes the token and deletes that copy.
 - Anyone can open the URL, but without a Google account that can read the sheet they
   only see the sign-in screen.
+
+## Adding entries and updating balances
+
+- **Add entry** (the **+** button on a phone) opens a form with the sheet's own fields: amount,
+  what it was, description, category, payment mode and date. Picking a name you have used
+  before fills in its usual category, payment mode and recent descriptions.
+  - The row goes into columns A to F, right after the last entry of the latest month. It is
+    read back to check it landed, and **Undo** clears it again.
+  - Amounts are written as numbers, money in as a negative number, and dates as
+    `dd/mm/yyyy` text, the same as rows typed by hand.
+- **Balances** edits the ABL, Sadapay and Cash figures for any month. These are the cells
+  under those labels in the month's column G block. Only those cells change, so Total and
+  Remaining keep their formulas. **Undo** puts back exactly what was there, formulas included.
 
 ## One-time setup
 
@@ -37,7 +50,7 @@ and deploys the site. You can also run it by hand from the **Actions** tab.
    **Google Auth Platform → Branding / Audience**):
    - User type: **External**
    - App name: `Ledger`, plus your email for support and developer contact
-   - Scopes: add `.../auth/spreadsheets.readonly`
+   - Scopes: add `.../auth/spreadsheets`
    - **Test users**: add your own Gmail address. While the app stays in *Testing*, only
      test users can sign in, and that is what you want.
 4. Go to **APIs & Services → Credentials → Create credentials → OAuth client ID**:
@@ -74,7 +87,8 @@ python3 -m http.server 8000
 | `index.html` | The page shell |
 | `styles.css` | Styles, with light and dark themes |
 | `logic.js` | Parsing and calculations: cycles, months, categories, subscriptions, spend limit. Unchanged from the Claude artifact |
-| `app.js` | Google sign-in, Sheets API reads, caching, rendering |
+| `app.js` | Google sign-in, Sheets API calls, caching, rendering |
+| `editor.js` | The Add entry form and the Balances editor |
 | `config.js` | OAuth client ID and sheet ID |
 | `.github/workflows/pages.yml` | Deploys to GitHub Pages |
 

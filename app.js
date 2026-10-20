@@ -1,7 +1,8 @@
 (function(){
   var CFG=window.LEDGER_CONFIG||{};
   var LS='expdash.v1',LS_CFG='ledger.config',SS_TOK='ledger.token';
-  var SCOPE='https://www.googleapis.com/auth/spreadsheets.readonly';
+  // Full sheets scope so the page can add entries and update balances, not only read.
+  var SCOPE='https://www.googleapis.com/auth/spreadsheets';
   var API='https://sheets.googleapis.com/v4/spreadsheets/';
   var TRACK_RANGE='Tracking!A1:G5000';
   var INCOME_RANGE="'Dashboard Data'!A1:L120";
@@ -35,11 +36,11 @@
   var S={mode:'cycle',sel:null,tracking:null,incomeRows:null,income:{},at:0,stale:false,err:null};
   // authState: 'unconfigured' (no client or sheet id), 'loading' (Google script not ready), 'signedout', 'ready'
   var authState=(CLIENT_ID&&SHEET_ID)?'loading':'unconfigured';
-  var tokenClient=null,token=null,pendingAuth=null,busy=false,retried=false,ctrl=null;
+  var tokenClient=null,token=null,pendingAuth=null,busy=false,again=false,retried=false,ctrl=null;
 
   try{
     var t=JSON.parse(sessionStorage.getItem(SS_TOK)||'null');
-    if(t&&t.t&&t.exp>Date.now()) token=t;
+    if(t&&t.t&&t.exp>Date.now()&&t.s===SCOPE) token=t;
   }catch(e){}
 
   function save(){
@@ -72,7 +73,7 @@
     if(c==='popup_closed') return 'The Google sign-in window was closed before access was granted. Press Sign in with Google to try again.';
     if(c==='popup_failed') return 'The Google sign-in window could not open. Allow pop-ups for this site, then press Sign in with Google.';
     if(c==='auth'||c==='unauthorized') return 'Your Google sign-in has expired or was refused. Press Sign in with Google.';
-    if(c==='forbidden') return 'Google refused access to the sheet. Sign in with the Google account that owns the Monthly Expense Tracking sheet, and check that the Google Sheets API is enabled for your OAuth project.';
+    if(c==='forbidden') return 'Google refused access to the sheet. Sign out, then sign in again with the Google account that owns the Monthly Expense Tracking sheet and allow it to see and edit your spreadsheets.';
     if(c==='not_found') return 'The sheet or its Tracking tab was not found. Check the sheet ID in config.js and that the tab is still named Tracking.';
     if(c==='rate_limited'||c==='upstream_error'||c==='network') return 'Google Sheets did not answer. '+(S.tracking?'Showing the last saved copy. ':'')+'Press Refresh to try again.';
     return 'The sheet could not be loaded ('+(c||(e&&e.message)||'unknown error')+'). Press Refresh to try again.';
@@ -87,9 +88,10 @@
     $('#signin').hidden=signedIn||authState!=='signedout';
     $('#signout').hidden=!signedIn&&!S.tracking;
     $('#refresh').hidden=!signedIn;
+    if(window.LedgerEditor) LedgerEditor.sync();
   }
   function setToken(r){
-    token={t:r.access_token,exp:Date.now()+Math.max(60,(+r.expires_in||3600)-60)*1000};
+    token={t:r.access_token,s:SCOPE,exp:Date.now()+Math.max(60,(+r.expires_in||3600)-60)*1000};
     try{sessionStorage.setItem(SS_TOK,JSON.stringify(token));}catch(e){}
     authState='ready';
   }
@@ -137,25 +139,33 @@
     document.head.appendChild(s);
   }
 
-  function getValues(range,signal){
-    return fetch(API+encodeURIComponent(SHEET_ID)+'/values/'+encodeURIComponent(range),{headers:{Authorization:'Bearer '+token.t},signal:signal})
+  function api(path,opt){
+    opt=opt||{};
+    var h={Authorization:'Bearer '+token.t};
+    if(opt.body) h['Content-Type']='application/json';
+    return fetch(API+encodeURIComponent(SHEET_ID)+path,{method:opt.method||'GET',headers:h,body:opt.body?JSON.stringify(opt.body):undefined,signal:opt.signal})
       .catch(function(e){
         var er=new Error(e&&e.message||'Network error');er.code=e&&e.name==='AbortError'?'cancelled':'network';er.retryable=er.code==='network';throw er;
       })
       .then(function(r){
-        if(r.ok) return r.json().then(function(j){return Array.isArray(j.values)?j.values:[];});
+        if(r.ok) return r.json();
         return r.json().catch(function(){return {};}).then(function(j){
           var s=r.status;
           var er=new Error((j.error&&j.error.message)||('HTTP '+s));
           er.code=s===401?'unauthorized':s===403?'forbidden':s===404||s===400?'not_found':s===429?'rate_limited':s>=500?'upstream_error':'http_'+s;
           er.retryable=s===429||s>=500;
+          if(er.code==='unauthorized'){dropToken();showAuthButtons();}
           throw er;
         });
       });
   }
+  function getValues(range,signal,render){
+    return api('/values/'+encodeURIComponent(range)+(render?'?valueRenderOption='+render:''),{signal:signal}).then(function(j){return Array.isArray(j.values)?j.values:[];});
+  }
 
   function load(manual){
-    if(busy||authState!=='ready') return Promise.resolve();
+    if(busy){again=true;return Promise.resolve();}
+    if(authState!=='ready') return Promise.resolve();
     if(!token||token.exp<=Date.now()){
       dropToken();showAuthButtons();
       setStatus('Your Google sign-in has expired. Press Sign in with Google to update.'+(S.tracking?' Showing a saved copy from '+timeStr(S.at)+'.':''),true);
@@ -193,8 +203,23 @@
     }).catch(function(){}).then(function(){
       clearTimeout(toAbort);
       busy=false;$('#refresh').disabled=false;$('#refresh').textContent='Refresh';
+      if(again){again=false;load(false);}
     });
   }
+
+  // Small surface for editor.js: authenticated Sheets calls plus shared helpers.
+  window.Ledger={
+    S:S,esc:esc,fmt:fmt,fmtS:fmtS,errMsg:errMsg,
+    sheetUrl:function(){return 'https://docs.google.com/spreadsheets/d/'+encodeURIComponent(SHEET_ID)+'/edit';},
+    state:function(){return authState;},
+    hasToken:function(){return !!(token&&token.exp>Date.now());},
+    signIn:function(){return signIn().then(function(){showAuthButtons();});},
+    get:function(range,render){return getValues(range,undefined,render);},
+    put:function(range,values){return api('/values/'+encodeURIComponent(range)+'?valueInputOption=RAW',{method:'PUT',body:{range:range,majorDimension:'ROWS',values:values}});},
+    batch:function(data,input){return api('/values:batchUpdate',{method:'POST',body:{valueInputOption:input||'RAW',data:data}});},
+    clear:function(range){return api('/values/'+encodeURIComponent(range)+':clear',{method:'POST',body:{}});},
+    refresh:function(){retried=false;return load(false);}
+  };
 
   function periodsFor(){
     var parsed=Logic.parseTracking(S.tracking);
@@ -246,7 +271,7 @@
         '<button type="submit" class="btn">Save and continue</button></form></section>';
     }
     if(authState==='signedout'){
-      return '<section class="panel empty"><b>Sign in to see your spending</b>Press Sign in with Google and choose the account that owns your Monthly Expense Tracking sheet. The page only asks for read-only access to your sheets.</section>';
+      return '<section class="panel empty"><b>Sign in to see your spending</b>Press Sign in with Google and choose the account that owns your Monthly Expense Tracking sheet. Google will ask to let this page see and edit your spreadsheets, so you can add entries and update balances from here.</section>';
     }
     return '<section class="panel empty"><b>Loading your spending</b>The dashboard will show the current cycle against the previous one, with category totals, daily spending and your largest expenses, as soon as the Tracking sheet answers.</section>';
   }

@@ -39,21 +39,33 @@ const Logic=(function(){
     var r=after('remaining');
     return r==null?null:{remaining:r,start:after('month start'),spent:after('spent')};
   }
+  // "Sada Pay", "sadapay" and "Sadapay" are the same account.
+  function normMode(m){
+    const t=String(m==null?'':m).trim();
+    if(/^sada\s*pay$/i.test(t)) return 'Sadapay';
+    if(/^abl$/i.test(t)) return 'ABL';
+    if(/^cash$/i.test(t)) return 'Cash';
+    return t||'Other';
+  }
+  function isHeading(r){
+    r=r||[];
+    const a=String(r[0]==null?'':r[0]).trim();
+    return !!a&&MONTH_RE.test(a)&&!r.slice(1,6).some(function(x){return String(x==null?'':x).trim()!=='';});
+  }
   function parseTracking(rows){
     const cycles=[],all=[];
     let cur=null;
     (rows||[]).forEach(function(r){
       r=r||[];
       const a=String(r[0]==null?'':r[0]).trim();
-      const rest=r.slice(1,6).some(function(x){return String(x==null?'':x).trim()!=='';});
-      if(a&&!rest&&MONTH_RE.test(a)){cur={name:a,tx:[],g:[]};cycles.push(cur);return;}
+      if(isHeading(r)){cur={name:a,tx:[],g:[]};cycles.push(cur);return;}
       const g=String(r[6]==null?'':r[6]).trim();
       if(cur&&g) cur.g.push(g);
       if(!a||a.toLowerCase()==='expense') return;
       const amt=num(r[1]);
       const cat=String(r[5]==null?'':r[5]).trim().toLowerCase();
       if(isNaN(amt)||!cat) return;
-      const tx={name:a,desc:String(r[2]==null?'':r[2]),amt:amt,day:parseDate(r[3]),mode:String(r[4]==null?'':r[4]).trim()||'Other',cat:cat};
+      const tx={name:a,desc:String(r[2]==null?'':r[2]),amt:amt,day:parseDate(r[3]),mode:normMode(r[4]),cat:cat};
       all.push(tx);
       if(cur) cur.tx.push(tx);
     });
@@ -284,5 +296,5 @@ const Logic=(function(){
       return Promise.all(jobs).then(function(parts){return [].concat.apply([],parts);});
     });
   }
-  return {num:num,parseDate:parseDate,todayNum:todayNum,parseTracking:parseTracking,cyclePeriods:cyclePeriods,monthPeriods:monthPeriods,aggregate:aggregate,parseIncome:parseIncome,readAll:readAll,subscriptions:subscriptions,rides:rides,foodBudget:foodBudget,PAYDAY_DOM:PAYDAY_DOM,BUFFER:BUFFER,CATS:CATS,MON:MON,DAY:DAY};
+  return {num:num,parseDate:parseDate,todayNum:todayNum,parseTracking:parseTracking,cyclePeriods:cyclePeriods,monthPeriods:monthPeriods,aggregate:aggregate,parseIncome:parseIncome,readAll:readAll,subscriptions:subscriptions,rides:rides,normMode:normMode,isHeading:isHeading,foodBudget:foodBudget,PAYDAY_DOM:PAYDAY_DOM,BUFFER:BUFFER,CATS:CATS,MON:MON,DAY:DAY};
 })();
