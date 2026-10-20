@@ -8,6 +8,7 @@
   var API='https://sheets.googleapis.com/v4/spreadsheets/';
   var TRACK_RANGE='Tracking!A1:G5000';
   var INCOME_RANGE="'Dashboard Data'!A1:L120";
+  var PLAN_RANGE='Plan!A1:E300';
 
   var local={};
   try{local=JSON.parse(localStorage.getItem(LS_CFG)||'{}')||{};}catch(e){}
@@ -25,7 +26,7 @@
   // authState: 'unconfigured' (no client or sheet id), 'loading' (Google script not ready), 'signedout', 'ready'
   var authState=(CLIENT_ID&&SHEET_ID)?'loading':'unconfigured';
   var tokenClient=null,token=null,pendingAuth=null,busy=false,again=false,retried=false,ctrl=null;
-  var listeners=[],pendingMsg='',started=false;
+  var listeners=[],pendingMsg='',started=false,noIncome=false;
 
   // Running as the installed Android app (Trusted Web Activity) or a home-screen app.
   // Google refuses its sign-in popup inside app views, so these use a full-page redirect.
@@ -44,7 +45,7 @@
   }catch(e){}
 
   function save(){
-    try{localStorage.setItem(LS,JSON.stringify({tracking:S.tracking,incomeRows:S.incomeRows,at:S.at,mode:S.mode,sel:S.sel}));}catch(e){}
+    try{localStorage.setItem(LS,JSON.stringify({tracking:S.tracking,incomeRows:S.incomeRows,planRows:S.planRows,planMissing:S.planMissing,at:S.at,mode:S.mode,sel:S.sel}));}catch(e){}
   }
   function restore(){
     try{
@@ -55,6 +56,7 @@
       if(Array.isArray(j.tracking)){
         S.tracking=j.tracking;S.incomeRows=j.incomeRows||null;
         S.income=Logic.parseIncome(S.incomeRows);S.at=j.at||0;S.stale=true;
+        S.planRows=Array.isArray(j.planRows)?j.planRows:null;S.planMissing=!!j.planMissing;
       }
     }catch(e){}
   }
@@ -186,9 +188,13 @@
       S.tracking=rows;S.rowCount=rows.length;
       S.at=Date.now();
       S.stale=false;S.err=null;retried=false;
-      return call(INCOME_RANGE).then(function(ir){
+      // The optional Dashboard Data tab: stop asking once Google says it does not exist.
+      return (noIncome?Promise.reject({code:'not_found'}):call(INCOME_RANGE)).then(function(ir){
         S.incomeRows=ir;S.income=Logic.parseIncome(ir);
-      }).catch(function(){S.incomeRows=null;S.income={};}).then(function(){S.calls=calls;});
+      }).catch(function(e){if(e&&e.code==='not_found') noIncome=true;S.incomeRows=null;S.income={};}).then(function(){
+        // The Plan tab holds the savings forecast settings; it is created on first save.
+        return call(PLAN_RANGE).then(function(pr){S.planRows=pr;S.planMissing=false;},function(e){if(e&&e.code==='not_found'){S.planRows=null;S.planMissing=true;}});
+      }).then(function(){S.calls=calls;});
     }).then(function(){
       save();
       notify('data');
@@ -242,6 +248,15 @@
     batch:function(data,input){return api('/values:batchUpdate',{method:'POST',body:{valueInputOption:input||'RAW',data:data}});},
     clear:function(range){return api('/values/'+encodeURIComponent(range)+':clear',{method:'POST',body:{}});},
     refresh:function(manual){retried=false;return load(!!manual);},
+    // Replace the Plan tab's contents (creating the tab the first time).
+    savePlan:function(rows){
+      var first=S.planMissing?api(':batchUpdate',{method:'POST',body:{requests:[{addSheet:{properties:{title:'Plan',gridProperties:{rowCount:300,columnCount:6}}}}]}})
+        .catch(function(e){if(!/already exists/i.test(e&&e.message||'')) throw e;}):Promise.resolve();
+      var range='Plan!A1:D'+rows.length;
+      return first.then(function(){S.planMissing=false;return api('/values/'+encodeURIComponent(PLAN_RANGE)+':clear',{method:'POST',body:{}});})
+        .then(function(){return api('/values/'+encodeURIComponent(range)+'?valueInputOption=RAW',{method:'PUT',body:{range:range,majorDimension:'ROWS',values:rows}});})
+        .then(function(){S.planRows=rows.map(function(r){return r.map(function(x){return x==null?'':String(x);});});save();notify('data');});
+    },
     on:function(f){listeners.push(f);}
   };
 

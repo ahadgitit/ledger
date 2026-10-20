@@ -109,6 +109,17 @@ python3 -m http.server 8000
   - the daily limit, bills, a category treemap, change against the previous period, a 22-week activity heatmap, payment rails, InDrive rides and the largest transactions
 - **Flows** is a money-flow diagram from account to category to item, with money in and transfers between accounts.
 - **Explorer** is an object browser for transactions and items. It has facets (category, payment mode, amount, scope), sortable columns, and an inspector that shows each object's properties, linked item, history and a link to its row in the sheet.
+- **Forecast** predicts your savings for the next 6, 12 or 24 payday cycles:
+  - "Pay yourself next payday": the amount you can move to savings and still be 80% sure you won't run short
+  - typical saving per cycle and savings rate
+  - a savings trajectory with uncertainty bands, a goal line and planned expenses
+  - the distribution of next cycle's outcomes, and where next cycle's pay goes (waterfall)
+  - levers ranked by what they're worth per cycle and per year
+  - a model check that forecasts past cycles from earlier data only
+
+  Your settings (minimum pay, usual extra pay, Mama, Touheed, other fixed costs, savings balance, goal, upcoming expenses) live in a **Plan** tab of the sheet, which the app creates on first save.
+
+  How it works: fixed costs come from the plan, and bills are detected in the sheet. Everyday spending (food, getting around, personal) is a moving-block bootstrap of your own 7-day stretches, with recent weeks weighted more (60-day half-life) and stretches with nothing logged skipped. One-off buys of Rs 3,000 or more are a separate compound-Poisson process. 2,000 seeded simulations give the bands. *Modest* and *Lean* resample only your cheaper 40% / 20% of weeks.
 - **Ctrl/Cmd + K** opens a command palette to jump to views, actions, items and transactions.
 
 ## Files
@@ -121,6 +132,7 @@ python3 -m http.server 8000
 | `viz.js` | Chart building blocks: scales, squarified treemap, flow layout, sparklines, sequential ramp |
 | `app.js` | Google sign-in, Sheets API calls, caching and change notifications |
 | `views.js` | Overview, Flows, Explorer, inspector and command palette |
+| `forecast.js` | Savings forecast model (bootstrap + compound Poisson Monte Carlo), Forecast workspace and plan editor |
 | `editor.js` | The Log entry form and the balances editor |
 | `config.js` | OAuth client ID and sheet ID |
 | `manifest.webmanifest`, `sw.js`, `icons/` | Installable web app: manifest, offline shell, icons |

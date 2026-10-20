@@ -26,6 +26,7 @@
     <a href="#/overview" data-view="overview"><span class="ti">&#9635;</span>Overview</a>
     <a href="#/flows" data-view="flows"><span class="ti">&#8780;</span>Flows</a>
     <a href="#/explorer" data-view="explorer"><span class="ti">&#9783;</span>Explorer</a>
+    <a href="#/forecast" data-view="forecast"><span class="ti">&#9672;</span>Forecast</a>
   </nav>
   <button type="button" class="cmdk" id="cmdk" aria-label="Search and commands"><span class="ci">&#9906;</span><span class="ct">Search objects, actions&hellip;</span><kbd>Ctrl K</kbd></button>
   <div class="sync off" id="sync" title="Sheet sync"><i></i><span id="sync-t">OFFLINE</span><time id="sync-time">&ndash;</time></div>
@@ -82,6 +83,17 @@
   </div>
 </dialog>
 
+<dialog class="sheet" id="plan-dlg" aria-labelledby="plan-title">
+  <div class="sheet-in">
+    <header class="sheet-h"><h2 id="plan-title"><span class="dlg-k">PLAN TAB</span>Savings plan</h2><button type="button" class="x" data-close aria-label="Close">&times;</button></header>
+    <div class="sheet-b" id="plan-body"></div>
+    <footer class="sheet-f">
+      <span class="hint-line" id="plan-hint"></span>
+      <button type="button" class="btn primary" id="plan-save">Save plan</button>
+    </footer>
+  </div>
+</dialog>
+
 <dialog class="sheet" id="bal-dlg" aria-labelledby="bal-title">
   <div class="sheet-in">
     <header class="sheet-h"><h2 id="bal-title"><span class="dlg-k">COLUMN G</span>Account balances</h2><button type="button" class="x" data-close aria-label="Close">&times;</button></header>
@@ -98,6 +110,7 @@
 <script src="viz.js"></script>
 <script src="app.js"></script>
 <script src="views.js"></script>
+<script src="forecast.js"></script>
 <script src="editor.js"></script>
 </body>
 </html>

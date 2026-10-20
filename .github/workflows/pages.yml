@@ -47,15 +47,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check scripts parse
-        run: for f in config.js logic.js viz.js app.js views.js editor.js sw.js; do node --check "$f"; done
+        run: for f in config.js logic.js viz.js app.js views.js forecast.js editor.js sw.js; do node --check "$f"; done
       - name: Collect site files
         run: |
           mkdir _site
-          cp index.html styles.css config.js logic.js viz.js app.js views.js editor.js sw.js manifest.webmanifest .nojekyll _site/
+          cp index.html styles.css config.js logic.js viz.js app.js views.js forecast.js editor.js sw.js manifest.webmanifest .nojekyll _site/
           cp -r icons _site/
           # Stamp asset URLs with the commit so browsers fetch new files after each deploy
           v="${GITHUB_SHA::7}"
-          sed -i -E "s#(href|src)=\"(styles\.css|config\.js|logic\.js|app\.js|editor\.js|viz\.js|views\.js)\"#\1=\"\2?v=$v\"#g" _site/index.html
+          sed -i -E "s#(href|src)=\"(styles\.css|config\.js|logic\.js|app\.js|editor\.js|viz\.js|views\.js|forecast\.js)\"#\1=\"\2?v=$v\"#g" _site/index.html
           grep -c "?v=$v" _site/index.html
       - name: Add the APK
         uses: actions/download-artifact@v4

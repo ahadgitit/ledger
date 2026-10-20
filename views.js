@@ -28,7 +28,7 @@
   var U={fx:false,view:'overview',layers:{prev:true,pace:true,events:true},ex:{type:'tx',scope:'period',q:'',cats:[],modes:[],min:0,sort:'day',dir:-1,sel:null}};
   try{var u=JSON.parse(localStorage.getItem(LSU)||'null');if(u){U.layers=Object.assign(U.layers,u.layers||{});if(u.ex){U.ex.type=u.ex.type||'tx';U.ex.scope=u.ex.scope||'period';}}}catch(e){}
   function saveU(){try{localStorage.setItem(LSU,JSON.stringify({layers:U.layers,ex:{type:U.ex.type,scope:U.ex.scope}}));}catch(e){}}
-  function viewFromHash(){var m=/^#\/(overview|flows|explorer)/.exec(location.hash);return m?m[1]:'overview';}
+  function viewFromHash(){var m=/^#\/(overview|flows|explorer|forecast)/.exec(location.hash);return m?m[1]:'overview';}
   U.view=viewFromHash();
 
   // =====================================================================
@@ -729,6 +729,8 @@
       {g:'Go to',t:'Overview',s:'Command centre',run:function(){go('overview');}},
       {g:'Go to',t:'Flows',s:'Account → category → item',run:function(){go('flows');}},
       {g:'Go to',t:'Explorer',s:'Every transaction and item',run:function(){go('explorer');}},
+      {g:'Go to',t:'Forecast',s:'Savings outlook for the coming cycles',run:function(){go('forecast');}},
+      {g:'Action',t:'Edit savings plan',s:'Pay, fixed costs, goal, upcoming expenses',run:function(){go('forecast');setTimeout(function(){if(window.Forecast) Forecast.openPlan();},60);}},
       {g:'Action',t:'Log entry',s:'Add a row to the sheet',run:function(){$('#add').click();}},
       {g:'Action',t:'Update balances',s:'ABL, Sadapay, Cash',run:function(){$('#bal').click();}},
       {g:'Action',t:'Refresh',s:'Read the sheet again',run:function(){L.refresh(true);}},
@@ -781,11 +783,15 @@
     if(M.empty){v.className='view';v.innerHTML='<div class="gate"><div class="gate-card"><h1>No entries found</h1><p>Nothing in the Tracking tab matched the expected columns: Expense, Amount, Description, Date, Payment mode, Category, under a month heading.</p></div></div>';return;}
     v.className='view v-'+U.view;
     var y=window.scrollY;
-    if(U.view==='flows'){v.innerHTML=flows();drawSankey();}
+    if(U.view==='forecast'&&window.Forecast){v.innerHTML=Forecast.view(M,UI);Forecast.draw(UI);}
+    else if(U.view==='flows'){v.innerHTML=flows();drawSankey();}
     else if(U.view==='explorer'){v.innerHTML=explorer();exTable();}
     else{v.innerHTML=overview();drawTrajectory();drawTree();drawHeat();drawRides();}
     window.scrollTo(0,y);
   }
+
+  var UI={pnl:pnl,kpi:kpi,showTip:showTip,hideTip:hideTip,rerender:function(){render();}};
+  window.LedgerUI=UI;
 
   // ---- tooltip ----
   var tip=null,tipTimer=0;
