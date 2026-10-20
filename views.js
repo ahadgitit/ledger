@@ -877,16 +877,26 @@
   $('#cmd').addEventListener('click',function(e){if(e.target===this) this.close();});
   window.addEventListener('hashchange',function(){U.view=viewFromHash();window.scrollTo(0,0);render();});
   var rz=0;
-  window.addEventListener('resize',function(){clearTimeout(rz);rz=setTimeout(function(){if(S.tracking) render();},160);});
+  // Charts follow the width only. On phones the keyboard opening changes the height, and
+  // re-rendering then would throw away the box being typed in and close the keyboard.
+  var lastW=window.innerWidth;
+  window.addEventListener('resize',function(){clearTimeout(rz);rz=setTimeout(function(){
+    if(!S.tracking||window.innerWidth===lastW) return;
+    if(typing()) return;
+    lastW=window.innerWidth;render();
+  },160);});
 
   L.on(function(what){
     if(what==='status'){renderStatus();return;}
     if(what==='busy'){renderStatus();$('#refresh').classList.toggle('spin',!!S.busy);return;}
     if(what==='auth'){renderShell();if(!S.tracking) render();return;}
     // Do not redraw under an open form; it would reset what is being typed.
-    if(document.querySelector('dialog.sheet[open]')){pending=true;return;}
+    if(document.querySelector('dialog.sheet[open]')||typing()){pending=true;return;}
     render();
   });
   var pending=false;
+  function typing(){var f=document.activeElement;return !!(f&&$('#view').contains(f)&&/^(INPUT|TEXTAREA|SELECT)$/.test(f.tagName));}
+  // a sync that lands while a Forecast box is being edited waits until you leave the box
+  $('#view').addEventListener('focusout',function(){setTimeout(function(){if(pending&&!typing()&&!document.querySelector('dialog.sheet[open]')){pending=false;render();}},0);});
   document.addEventListener('close',function(e){if(e.target.matches&&e.target.matches('dialog.sheet')&&pending){pending=false;render();}},true);
 })();
