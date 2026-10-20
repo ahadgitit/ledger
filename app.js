@@ -362,6 +362,46 @@
         head+'<ul class="subs">'+items+'</ul>'+
         '<details><summary>Cost by '+unit+'</summary><div class="tbl-wrap"><table><thead><tr><th>'+unitCap+'</th>'+sub.cols.map(function(c){return '<th class="n">'+esc(c.label)+'</th>';}).join('')+'<th class="n">Total</th></tr></thead><tbody>'+tRows+'</tbody></table></div></details></section>';
     })();
+    var rideAll=Logic.rides(periods),rideHTML='',rideTrend=null;
+    (function(){
+      if(!rideAll.some(function(r){return r.count;})) return;
+      var R=rideAll[i],RP=prev?rideAll[i-1]:null;
+      var stats=[['Rides',String(R.count)],['Average ride',R.count?fmt(R.total/R.count):'–']];
+      stats.push(['Office trips',R.officeN?R.officeN+' · '+fmt(R.office):'0']);
+      var tr=A.by['Transport'];
+      if(tr>0) stats.push(['Share of Transport',Math.round(R.total/tr*100)+'%']);
+      var cmp='First '+unit+' on record.';
+      if(RP) cmp=prev.label+': '+fmt(RP.total)+' over '+RP.count+(RP.count===1?' ride':' rides')+'.';
+      var rows=R.list.map(function(r){
+        var route=r.from&&r.to?r.from+' → '+r.to:r.to?'To '+r.to:r.from?'From '+r.from:(r.note||(r.office?'Office trip':'–'));
+        var tags=r.tags.map(function(g){return '<span class="tag">'+esc(g)+'</span>';}).join('');
+        return '<tr><td>'+esc(r.day!=null?fmtDay(r.day):'')+'</td><td>'+esc(route)+tags+'</td><td>'+esc(r.mode)+'</td><td class="n">'+fmt(r.amt)+'</td></tr>';
+      }).join('');
+      var dest={};
+      rideAll.forEach(function(x){x.list.forEach(function(r){
+        if(!r.to) return;
+        var k=r.to.toLowerCase();
+        if(!dest[k]) dest[k]={name:r.to,n:0,v:0};
+        dest[k].n++;dest[k].v+=r.amt;
+      });});
+      var dl=Object.keys(dest).map(function(k){return dest[k];}).sort(function(a,b){return (b.n-a.n)||(b.v-a.v);}).slice(0,6);
+      var dmax=Math.max.apply(null,dl.map(function(d){return d.n;}).concat([1]));
+      var destRows=dl.map(function(d){
+        return '<li class="mode" data-tip="'+esc(d.name+'\n'+d.n+(d.n===1?' ride, ':' rides, ')+fmt(d.v)+'\nAverage '+fmt(d.v/d.n))+'"><div class="m-name">'+esc(d.name)+'</div><div class="track"><i class="bar bn" style="width:'+Math.max(1.5,d.n/dmax*100)+'%"></i></div><div class="v v1">'+d.n+(d.n===1?' ride':' rides')+'</div></li>';
+      }).join('');
+      var from=Math.max(0,periods.length-8);
+      rideTrend=periods.slice(from).map(function(p,k){
+        var x=rideAll[from+k];
+        var cls=p.key===cur.key?'c-s1':(prev&&p.key===prev.key)?'c-s2':'c-n';
+        return {v:x.total,cls:cls,xl:p.label,top:x.total?kfmt(x.total):'',tip:p.name+'\n'+x.count+(x.count===1?' ride':' rides')+'\n'+fmt(x.total)};
+      });
+      rideHTML='<section class="panel"><div class="panel-h"><h2>InDrive rides</h2><span class="hint">'+esc(rangeText(cur))+'</span></div>'+
+        '<div class="pair"><div><div class="eyebrow">Spent on InDrive</div><div class="bud-big">'+esc(fmt(R.total))+'</div><div class="bud-note">'+esc(cmp)+'</div>'+
+        '<dl class="stats ride-stats">'+stats.map(function(s){return '<div><dt>'+esc(s[0])+'</dt><dd>'+esc(s[1])+'</dd></div>';}).join('')+'</dl></div>'+
+        '<div><div class="sub-line">InDrive by '+unit+'</div><div id="rides-trend"></div></div></div>'+
+        '<div class="pair ride-lower"><div><div class="sub-line">Rides this '+unit+'</div>'+(rows?'<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Route</th><th>Paid via</th><th class="n">Fare</th></tr></thead><tbody>'+rows+'</tbody></table></div>':'<div class="empty">No InDrive rides this '+unit+' yet.</div>')+'</div>'+
+        '<div><div class="sub-line">Where you go most, all time</div>'+(destRows?'<ul class="modes">'+destRows+'</ul>':'<div class="empty">No destinations recorded yet.</div>')+'</div></div></section>';
+    })();
     var budgetHTML='';
     (function(){
       var fb=Logic.foodBudget(cur,bal,subAll,Logic.todayNum());
@@ -424,6 +464,7 @@
       '<section class="panel"><div class="panel-h"><h2>Where it went</h2><div class="legend"><span><i class="sw s1"></i>'+esc(cur.label)+'</span>'+(B?'<span><i class="sw s2"></i>'+esc(prev.label)+'</span>':'')+'</div></div>'+
         (catRows?'<ul class="cats">'+catRows+'</ul>':'<div class="empty">No spending recorded in this period yet.</div>')+'</section>'+
       subHTML+
+      rideHTML+
       '<div class="pair">'+
         '<section class="panel"><div class="panel-h"><h2>Spending by day</h2><span class="hint">'+esc(rangeText(cur))+'</span></div><div id="daily"></div>'+
           '<details><summary>Daily figures</summary><div class="tbl-wrap"><table><thead><tr><th>Date</th><th class="n">Spent</th></tr></thead><tbody>'+(dayRows||'<tr><td colspan="2">No spending yet.</td></tr>')+'</tbody></table></div></details></section>'+
@@ -452,11 +493,13 @@
       return {v:v,cls:cls,xl:p.label,top:kfmt(v),tip:p.name+'\n'+rangeText(p)+'\nSpent '+fmt(v)};
     });
     drawCols($('#trend'),tItems,{aria:'Spending by '+unit});
+    if(rideTrend) drawCols($('#rides-trend'),rideTrend,{aria:'InDrive spending by '+unit,h:170});
 
     var n=[];
     n.push('<p>Spent adds Food, Utilities, Family/Home, Renovation, Transport, Shopping, Fun, Loans given and Untracked. Savings, transfers and money received back are kept out of it.</p>');
     if(bal) n.push('<p>Remaining comes from the balance notes in column G of your Tracking tab: what the cycle started with, minus Spent.</p>');
     if(subHTML) n.push('<p>Subscriptions and bills are picked out of the Expense and Description columns: Claude, internet, Amazon, foodpanda, YouTube and Netflix. A bill counts as still due when it was paid in an earlier period but not yet in this one, at the amount last paid. The due date repeats the day of the month it was last paid.</p>');
+    if(rideHTML) n.push('<p>InDrive rides are rows named InDrive, or with InDrive in the description. The route comes from the description: "home to office", "to office" or "to api from home". Office trips are rides whose description mentions the office or says absent. Where you go most counts every ride with a destination.</p>');
     if(budgetHTML) n.push('<p>Daily spend limit: Remaining from column G of your Tracking tab, minus bills still due before payday, keeping '+Math.round(Logic.BUFFER*100)+'% back, divided by the days from today up to the day before the '+Logic.PAYDAY_DOM+'th. It covers all everyday spending, food or otherwise, from this one limit. It only appears for the current payday cycle.</p>');
     if(inc&&!isNaN(inc.spent)){
       var diff=Math.abs(inc.spent-A.spent);

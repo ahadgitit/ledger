@@ -209,3 +209,6 @@ td small{display:block;color:var(--ink-2);font-size:12px}
 .setup label{display:grid;gap:4px;font-size:13px;color:var(--ink-2)}
 .setup input{font:13px var(--font-num);color:var(--ink);background:var(--plane);border:1px solid var(--hair);border-radius:8px;padding:8px 10px;width:100%}
 .setup .btn{justify-self:start}
+.ride-stats{margin-top:14px}
+.ride-lower{margin-top:16px}
+.tag{display:inline-block;font-size:11px;color:var(--ink-2);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-left:6px;white-space:nowrap}

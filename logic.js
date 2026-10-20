@@ -226,6 +226,47 @@ const Logic=(function(){
     const usable=avail>0?avail-buffer:0;
     return {remaining:bal.remaining,due:due,later:later,avail:avail,buffer:buffer,usable:usable,days:days,perDay:usable/days,payday:pay,from:from,short:avail<0?-avail:0};
   }
+  const RIDE_RE=/in\s*-?\s*drive/i;
+  function place(s){
+    s=String(s||'').replace(/\s+/g,' ').trim();
+    if(!s) return '';
+    if(/^(house|my house|home)$/.test(s)) s='home';
+    return s.charAt(0).toUpperCase()+s.slice(1);
+  }
+  function rideOf(t){
+    if(!(t.amt>0)) return null;
+    if(t.cat==='influx'||t.cat==='transfer'||t.cat==='savings'||t.cat==='loaned') return null;
+    if(!RIDE_RE.test(t.name)&&!RIDE_RE.test(t.desc)) return null;
+    let d=t.desc.toLowerCase();
+    const tags=[];
+    if(/\babsent\b/.test(d)) tags.push('Touheed absent');
+    if(/\bweekend\b/.test(d)) tags.push('Weekend');
+    d=d.replace(/\b(absent|weekend|touheed|in\s*-?\s*drive)\b/g,' ').replace(/\s+/g,' ').trim();
+    let from='',to='',m;
+    if((m=/^to (.+?) from (.+)$/.exec(d))){to=m[1];from=m[2];}
+    else if((m=/^(?:from )?(.+?) to (.+)$/.exec(d))){from=m[1];to=m[2];}
+    else if((m=/^to (.+)$/.exec(d))){to=m[1];}
+    else if((m=/^from (.+)$/.exec(d))){from=m[1];}
+    from=place(from);to=place(to);
+    let note='';
+    if(!from&&!to) note=place(d)||(RIDE_RE.test(t.name)?'':place(t.name));
+    const office=/\boffice\b/.test(d)||tags.indexOf('Touheed absent')>=0;
+    return {day:t.day,amt:t.amt,mode:t.mode,from:from,to:to,note:note,tags:tags,office:office};
+  }
+  function rides(periods){
+    return periods.map(function(p){
+      const list=[];
+      let total=0,office=0,officeN=0;
+      p.tx.forEach(function(t){
+        const r=rideOf(t);
+        if(!r) return;
+        list.push(r);total+=r.amt;
+        if(r.office){office+=r.amt;officeN++;}
+      });
+      list.sort(function(a,b){return (a.day==null?Infinity:a.day)-(b.day==null?Infinity:b.day);});
+      return {list:list,total:total,count:list.length,office:office,officeN:officeN};
+    });
+  }
   function readAll(call,onCount){
     function readRows(s,e){
       return call('Tracking!A'+s+':G'+e).then(function(rows){
@@ -243,5 +284,5 @@ const Logic=(function(){
       return Promise.all(jobs).then(function(parts){return [].concat.apply([],parts);});
     });
   }
-  return {num:num,parseDate:parseDate,todayNum:todayNum,parseTracking:parseTracking,cyclePeriods:cyclePeriods,monthPeriods:monthPeriods,aggregate:aggregate,parseIncome:parseIncome,readAll:readAll,subscriptions:subscriptions,foodBudget:foodBudget,PAYDAY_DOM:PAYDAY_DOM,BUFFER:BUFFER,CATS:CATS,MON:MON,DAY:DAY};
+  return {num:num,parseDate:parseDate,todayNum:todayNum,parseTracking:parseTracking,cyclePeriods:cyclePeriods,monthPeriods:monthPeriods,aggregate:aggregate,parseIncome:parseIncome,readAll:readAll,subscriptions:subscriptions,rides:rides,foodBudget:foodBudget,PAYDAY_DOM:PAYDAY_DOM,BUFFER:BUFFER,CATS:CATS,MON:MON,DAY:DAY};
 })();
