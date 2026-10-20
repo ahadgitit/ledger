@@ -133,9 +133,11 @@ var Forecast=(function(){
     var word=R.avail<=0?'Already touched':p>=0.75?'Likely untouched':p>=0.45?'Tight':'At risk';
     var icon={good:'\u2713',warning:'!',critical:'\u2715'}[lv];
     var until=fmtDay(R.lastDay);
+    // start from the same Remaining the Overview shows, then take off the bills it has to cover
+    var held=R.fb.due>0?' Your Remaining is '+fmt(R.fb.remaining)+', but '+fmt(R.fb.due)+' of it is needed for bills before payday.':' Your Remaining is '+fmt(R.fb.remaining)+'.';
     var lead=R.avail<=0
-      ?'Bills still due already take more than what is left, so about '+fmt(-R.avail)+' would have to come out of your Pay myself.'
-      :'You have '+fmt(R.avail)+' to spend over the next '+R.days+(R.days===1?' day':' days')+' (today to '+until+'). Based on how you usually spend, there is a '+Math.round(p*100)+'% chance that is enough.'+
+      ?held.slice(1)+' That is more than what is left, so about '+fmt(-R.avail)+' would have to come out of your Pay myself.'
+      :held.slice(1)+' That leaves '+fmt(R.avail)+' to spend over the next '+R.days+(R.days===1?' day':' days')+' (today to '+until+'). Based on how you usually spend, there is a '+Math.round(p*100)+'% chance that is enough.'+
         (R.dip.p50>0?' Spending as usual (about '+fmt(R.spend.p50)+') would take about '+fmt(r100(R.dip.p50))+' out of your Pay myself.':'');
     var bar='';
     if(R.avail>0){
@@ -153,9 +155,9 @@ var Forecast=(function(){
     // where the likely spend sits against the money available
     var s=R.spend,mx=Math.max(s.p90,R.avail,1)*1.08,X=function(v){return Math.max(0,Math.min(100,v/mx*100));};
     var range='<div class="m-range"><div class="m-track"><i class="m-r" style="left:'+X(s.p10)+'%;width:'+(X(s.p90)-X(s.p10))+'%"></i><i class="m-m" style="left:'+X(s.p50)+'%"></i>'+
-      (R.avail>0?'<i class="m-a" style="left:'+X(R.avail)+'%"><span>You have '+esc(K(R.avail))+'</span></i>':'')+'</div>'+
+      (R.avail>0?'<i class="m-a" style="left:'+X(R.avail)+'%"><span>After bills '+esc(K(R.avail))+'</span></i>':'')+'</div>'+
       '<div class="m-scale"><span>0</span><span>'+esc(K(mx))+'</span></div></div>';
-    var bills=R.dueBills.length?R.dueBills.map(function(b){return esc(b.label)+(b.when!=null?' ('+esc(fmtDay(b.when))+')':'');}).join(', '):'none';
+    var bills=R.dueBills.map(function(b){return '<div class="sub"><dt>'+esc(b.label)+(b.when!=null?' <small>'+esc(fmtDay(b.when))+'</small>':'')+'</dt><dd>\u2212'+esc(fmt(b.amount))+'</dd></div>';}).join('');
     return '<div class="month">'+
       '<section class="pnl m-hero m-'+lv+'"><div class="pnl-b">'+
         '<div class="m-q">Will your Pay myself of <b>'+esc(fmt(R.saved))+'</b> stay untouched until '+esc(until)+'?</div>'+
@@ -178,14 +180,13 @@ var Forecast=(function(){
       '</div>'+
       ui.pnl('m-money','Money until payday',esc(R.cur.name)+' \u00b7 column G',
         '<dl class="ledger">'+
-          '<div><dt>Remaining after Pay myself</dt><dd>'+esc(fmtS(R.fb.remaining))+'</dd></div>'+
-          '<div><dt>Bills still due before payday</dt><dd>\u2212'+esc(fmt(R.fb.due))+'</dd></div>'+
+          '<div><dt>Remaining (column G, same as Overview)</dt><dd>'+esc(fmtS(R.fb.remaining))+'</dd></div>'+
+          '<div><dt>Bills still due before payday</dt><dd>\u2212'+esc(fmt(R.fb.due))+'</dd></div>'+bills+
           '<div class="tot"><dt>To spend until '+esc(until)+'</dt><dd>'+esc(fmtS(R.avail))+'</dd></div>'+
-          '<div><dt>Days, today to '+esc(until)+'</dt><dd>'+R.days+'</dd></div></dl>'+bar+
-        '<p class="fc-note">Bills due: '+bills+'.</p>',{cls:''})+
+          '<div><dt>Days, today to '+esc(until)+'</dt><dd>'+R.days+'</dd></div></dl>'+bar,{cls:''})+
       ui.pnl('m-spend','Your likely spending until payday','',
         '<p class="m-s">Most likely <b>'+esc(fmt(s.p50))+'</b>, usually between '+esc(fmt(s.p10))+' and '+esc(fmt(s.p90))+'.</p>'+range+
-        '<div class="legend sm"><span><i class="sw m-rs"></i>Likely range (8 in 10 months)</span><span><i class="sw m-ms"></i>Most likely</span><span><i class="sw m-as"></i>Money you have</span></div>',{cls:''})+
+        '<div class="legend sm"><span><i class="sw m-rs"></i>Likely range (8 in 10 months)</span><span><i class="sw m-ms"></i>Most likely</span><span><i class="sw m-as"></i>Money after bills</span></div>',{cls:''})+
       '<details class="notes"><summary>How this is worked out</summary>'+
         '<p>Remaining comes from column G of '+esc(R.cur.name)+', which already has your Pay myself set aside. Bills still due before payday (Claude, internet, YouTube, Amazon, foodpanda) are taken off. Payday is taken as the 20th, the latest you usually get paid.</p>'+
         '<p>Your spending is replayed from your own last '+R.histDays+' days: random week-long stretches stitched together, recent weeks counting more, '+SIMS.toLocaleString('en-US')+' times. One-off buys of Rs 3,000 or more (about '+(R.lumpRate*30).toFixed(1)+' a month lately) are added separately. The chance is how many of those replays fit in the money you have.</p>'+

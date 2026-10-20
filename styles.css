@@ -266,6 +266,7 @@ line.axis{stroke:var(--axis);stroke-width:1}
 .ledger>div:first-child{border-top:0}
 .ledger dt{color:var(--ink-2)}
 .ledger dd{margin:0;font:500 12px var(--font-num);white-space:nowrap}
+.ledger>div.sub{padding:3px 0 3px 14px;border-top:0}.ledger>div.sub dt,.ledger>div.sub dd{color:var(--muted);font-size:11.5px}.ledger>div.sub small{font:10.5px var(--font-num);color:var(--muted);margin-left:6px}
 .ledger .tot dt,.ledger .tot dd{color:var(--ink);font-weight:600}
 
 /* bills */
