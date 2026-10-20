@@ -48,7 +48,7 @@ var Forecast=(function(){
     for(var i=Math.max(0,cyc.length-7);i<cyc.length-1;i++){
       var c=cyc[i],len=cyc[i+1].start-c.start;
       if(len<14) continue;
-      var h={name:c.name,len:len,food:0,shop:0,untracked:0,ride:rides[i].total,ess:{}};
+      var h={name:c.name,len:len,food:0,shop:0,untracked:0,ride:rides[i].total,ess:{},lumps:[]};
       ESS.forEach(function(e){h.ess[e.k]=0;});
       c.tx.forEach(function(t){
         if(!(t.amt>0)) return;
@@ -62,7 +62,11 @@ var Forecast=(function(){
         if(/in\s*-?\s*drive/.test(s)||cat==='transport') return;
         var e=ESS.find(function(x){return x.re.test(s);});
         if(e) h.ess[e.k]+=t.amt;
+        // one-off buys of 10,000 or more (an oven, a course), for the savings outlook
+        else if(t.amt>=10000) h.lumps.push(t.amt);
       });
+      // everyday spending the outlook scales month to month
+      h.vari=h.food+h.shop+h.ride+ESS.reduce(function(a,e){return a+h.ess[e.k];},0);
       out.push(h);
     }
     return out;
@@ -202,6 +206,7 @@ var Forecast=(function(){
         '<p class="m-lead" id="fp-lead"></p>'+
         '<dl class="ledger fp-sum" id="fp-sum"></dl>'+
       '</div></section>'+
+      outlookView()+
       '<div class="fp-grid">'+
       ui.pnl('fp-food','Food','what you spent each month',
         (foodMode?result('food'):capBox('food',usualFood))+foodChart()+
@@ -227,7 +232,8 @@ var Forecast=(function(){
     '</div>';
   }
 
-  function draw(){
+  function draw(ui){
+    UIref=ui||UIref;
     var root=$('#fp');if(!root||!R||R.msg) return;
     var s=load(),id=R.id;
     function bucket(){return s.bills[id]=s.bills[id]||{};}
@@ -242,7 +248,20 @@ var Forecast=(function(){
       else s.ess[e.key]=e.amt;
     }
     root.addEventListener('input',function(e){
-      var t=e.target,row=t.closest('[data-bill],[data-ess],[data-cap],[data-adv]');
+      var t=e.target,o=t.closest('[data-out]'),pl=t.closest('[data-plan]');
+      if(o){
+        var ov=amt(t.value);
+        if(o.dataset.out==='base') s.base=ov;
+        else if(o.dataset.out==='next') s.next=ov==null?null:{id:id,amt:ov};
+        else s.lumps=t.checked;
+        save();update();return;
+      }
+      if(pl){
+        var P=s.planned[+pl.dataset.plan];
+        if(t.classList.contains('ol-m')) P.ym=t.value;else if(t.classList.contains('fp-lbl')) P.label=t.value;else P.amt=amt(t.value)||0;
+        save();update();return;
+      }
+      var row=t.closest('[data-bill],[data-ess],[data-cap],[data-adv]');
       if(!row) return;
       var v=amt(t.value),isLbl=t.classList.contains('fp-lbl');
       if(row.dataset.bill!=null){
@@ -279,8 +298,12 @@ var Forecast=(function(){
         var box=t.closest('[data-cap]'),inp=$('input',box),u=+t.dataset.use;
         inp.value=u.toLocaleString('en-US');s[box.dataset.cap+'Cap']=u;save();update();
       }
-      else if(t.dataset.add==='bill'){var o=bucket();o._extra=(o._extra||[]).concat([{label:'',amt:0}]);save();rerender(focusLast);}
-      else if(t.dataset.add==='ess'){s.essExtra=(s.essExtra||[]).concat([{label:'',amt:0}]);save();rerender(focusLast);}
+      else if(t.dataset.level){s.level=t.dataset.level;save();$$('[data-level]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});update();}
+      else if(t.dataset.hz){s.hz=+t.dataset.hz;save();$$('[data-hz]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});update();}
+      else if(t.dataset.add==='plan'){var M=months(1);s.planned=(s.planned||[]).concat([{ym:M[0].ym,label:'',amt:0}]);save();rerender(function(){focusLast('.ol-plan .fp-lbl');});}
+      else if(t.classList.contains('fp-del')&&t.closest('[data-plan]')){s.planned.splice(+t.closest('[data-plan]').dataset.plan,1);save();rerender();}
+      else if(t.dataset.add==='bill'){var o=bucket();o._extra=(o._extra||[]).concat([{label:'',amt:0}]);save();rerender(function(){focusLast('[data-bill] .fp-lbl');});}
+      else if(t.dataset.add==='ess'){s.essExtra=(s.essExtra||[]).concat([{label:'',amt:0}]);save();rerender(function(){focusLast('[data-ess] .fp-lbl');});}
       else if(t.classList.contains('fp-del')){
         var r=t.closest('[data-bill],[data-ess]'),k=r.dataset.bill!=null?r.dataset.bill:r.dataset.ess,j=+k.slice(1);
         if(r.dataset.bill!=null) bucket()._extra.splice(j,1);else s.essExtra.splice(j,1);
@@ -293,7 +316,7 @@ var Forecast=(function(){
     });
     update();
   }
-  function focusLast(){var l=$$('#fp .fp-lbl');if(l.length) l[l.length-1].focus();}
+  function focusLast(sel){var l=$$('#fp '+sel);if(l.length) l[l.length-1].focus();}
   function rerender(then){
     var y=window.scrollY;if(window.LedgerUI) LedgerUI.rerender();window.scrollTo(0,y);if(then) then();
   }
@@ -349,6 +372,172 @@ var Forecast=(function(){
       var ad=I.adv[p.key]||{},fee=I.fees[p.key]!=null?I.fees[p.key]:p.fee,n=$('[data-next="'+p.key+'"]');
       n.textContent=ad.amt?'Next payday you pay '+fmt(Math.max(0,fee-ad.amt))+' instead of '+fmt(fee)+', and '+fmt(Math.min(ad.amt,fee))+' goes back to Pay myself.':'No advance this month.';
     });
+    drawOutlook(I,C);
+  }
+
+
+  // ---------------------------------------------------------------- savings outlook
+  /* Where Pay myself goes over the coming months. Each month: salary in, then Mama,
+     Touheed, bills and the month's spending out; what is left is added to Pay myself.
+     Spending starts from this month's plan above (your caps, essentials, InDrive and
+     bills, scaled to a month) and moves up or down with the level you pick. Around
+     that, 3,000 simulated futures: each month's everyday spending is scaled by how
+     much one of your past months ran over or under your average (resampled), and
+     one-off buys of Rs 10,000 or more turn up as often, and as big, as they have. */
+  var OSIMS=3000,MDAYS=30.4;
+  var LEVELS=[{k:'lower',t:'Lower',f:0.9,s:'−10%'},{k:'same',t:'Same',f:1,s:'as now'},{k:'higher',t:'Higher',f:1.1,s:'+10%'}];
+  function rng(seed){var a=seed>>>0;return function(){a=(a+0x6D2B79F5)>>>0;var t=a;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296;};}
+  function poisson(lam,r){if(lam<=0) return 0;var Lm=Math.exp(-lam),k=0,p=1;do{k++;p*=r();}while(p>Lm&&k<40);return k-1;}
+  function q(sorted,p){if(!sorted.length) return 0;var i=(sorted.length-1)*p,lo=Math.floor(i),hi=Math.ceil(i);return sorted[lo]+(sorted[hi]-sorted[lo])*(i-lo);}
+  function ymOf(day){var d=new Date(day*DAY);return d.getUTCFullYear()+'-'+('0'+(d.getUTCMonth()+1)).slice(-2);}
+  // the coming payday cycles: the one starting next payday, then one a month
+  function months(n){
+    var d=new Date(R.pay*DAY),out=[];
+    for(var m=0;m<n;m++){
+      var day=Math.round(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+m,Logic.PAYDAY_DOM)/DAY),dd=new Date(day*DAY);
+      out.push({day:day,ym:ymOf(day),name:MON[dd.getUTCMonth()],year:dd.getUTCFullYear()});
+    }
+    return out;
+  }
+  function oInputs(){
+    var s=load();
+    return {base:s.base!=null?s.base:130000,next:s.next&&s.next.id===R.id?s.next.amt:null,
+      level:s.level||'same',hz:s.hz===12?12:6,lumps:s.lumps!==false,planned:s.planned||[]};
+  }
+  // one month of spending, from this month's plan
+  function monthPlan(I,C){
+    var k=MDAYS/R.days,food=I.mode==='food';
+    var bills=R.bills.reduce(function(a,b){return a+(b.amt||0);},0);
+    var parts={
+      food:!food&&I.foodCap!=null?I.foodCap*k:R.usual.food*MDAYS,
+      shop:food&&I.shopCap!=null?I.shopCap*k:R.usual.shop*MDAYS,
+      ess:C.ess*k,ride:R.lv[I.ride]*MDAYS};
+    var fee=function(p){return I.fees[p.key]!=null?I.fees[p.key]:p.fee;};
+    return {bills:bills,parts:parts,variable:parts.food+parts.shop+parts.ess+parts.ride,
+      mama:fee(PEOPLE[1]),touheed:fee(PEOPLE[0]),
+      foodSrc:!food&&I.foodCap!=null?'your cap':'your usual',shopSrc:food&&I.shopCap!=null?'your cap':'your usual'};
+  }
+  // what is left of this cycle when it ends: a shortfall comes out of Pay myself
+  function startBalance(I,C){
+    var d=R.days,food=I.mode==='food',usualFood=R.usual.food*d,usualShop=R.usual.shop*d;
+    var end=C.left!=null?C.left-(food?usualFood:usualShop):C.base-usualFood-usualShop;
+    return {bal:C.kept+Math.min(0,end),dip:Math.min(0,end)};
+  }
+  function simulate(I,C){
+    var O=oInputs(),P=monthPlan(I,C),lv=LEVELS.find(function(x){return x.k===O.level;}).f;
+    var H=O.hz,M=months(12).slice(0,H),st0=startBalance(I,C);
+    var plan={};O.planned.forEach(function(p){if(p.amt>0) plan[p.ym]=(plan[p.ym]||0)+p.amt;});
+    var advT=(I.adv.touheed||{}).amt||0,advM=(I.adv.mama||{}).amt||0;
+    // how each past month's everyday spending ran against the average
+    var per=R.hist.map(function(x){return x.vari/x.len;}),avg=mean(per)||1;
+    var ratios=per.map(function(v){return v/avg;});
+    var lumps=[];R.hist.forEach(function(x){lumps=lumps.concat(x.lumps);});
+    var lam=O.lumps?lumps.length/R.hist.length:0;
+    var rows=M.map(function(m,i){
+      var sal=i===0&&O.next!=null?O.next:O.base;
+      var mama=Math.max(0,P.mama-(i===0?advM:0)),tou=Math.max(0,P.touheed-(i===0?advT:0));
+      var spend=P.variable*lv;
+      return {m:m,salary:sal,mama:mama,touheed:tou,bills:P.bills,spend:spend,planned:plan[m.ym]||0,
+        save:sal-mama-tou-P.bills-spend-(plan[m.ym]||0)};
+    });
+    var r=rng(R.id*31+H),paths=[];for(var j=0;j<H;j++) paths.push([]);
+    var saves=[];for(var j2=0;j2<H;j2++) saves.push([]);
+    for(var s=0;s<OSIMS;s++){
+      var bal=st0.bal;
+      for(var i=0;i<H;i++){
+        var row=rows[i],v=row.spend*ratios[Math.floor(r()*ratios.length)],l=0,n=poisson(lam,r);
+        for(var k=0;k<n;k++) l+=lumps[Math.floor(r()*lumps.length)];
+        var sv=row.salary-row.mama-row.touheed-row.bills-v-l-row.planned;
+        bal+=sv;paths[i].push(bal);saves[i].push(sv);
+      }
+    }
+    var asc=function(a,b){return a-b;};
+    var band=paths.map(function(a){a.sort(asc);return {p10:q(a,0.1),p25:q(a,0.25),p50:q(a,0.5),p75:q(a,0.75),p90:q(a,0.9)};});
+    saves.forEach(function(a,i){a.sort(asc);rows[i].saveP50=q(a,0.5);});
+    return {O:O,P:P,lv:lv,rows:rows,band:band,start:st0,lam:lam,lumpAvg:lumps.length?mean(lumps):0,spread:ratios};
+  }
+
+  function outlookView(){
+    var O=oInputs(),M=months(12),nm=M[0];
+    var lvSeg='<div class="seg fp-seg" role="group" aria-label="Spending in the coming months">'+LEVELS.map(function(x){
+      return '<button type="button" data-level="'+x.k+'" aria-pressed="'+(O.level===x.k)+'">'+x.t+'<small>'+x.s+'</small></button>';}).join('')+'</div>';
+    var hz='<div class="seg sm" role="group" aria-label="How far ahead"><button type="button" data-hz="6" aria-pressed="'+(O.hz===6)+'">6 months</button><button type="button" data-hz="12" aria-pressed="'+(O.hz===12)+'">12 months</button></div>';
+    var opts=function(sel){return M.map(function(m){return '<option value="'+m.ym+'"'+(m.ym===sel?' selected':'')+'>'+m.name+' '+m.year+'</option>';}).join('');};
+    var planned=O.planned.map(function(p,j){
+      return '<div class="fp-row ol-plan" data-plan="'+j+'"><select class="inline ol-m" aria-label="Month">'+opts(p.ym)+'</select>'+
+        '<div class="fp-name"><input class="inline fp-lbl" value="'+esc(p.label||'')+'" placeholder="What for" aria-label="What for"></div>'+
+        money(p.amt)+'<button type="button" class="x fp-del" aria-label="Remove">&times;</button></div>';
+    }).join('');
+    return '<section class="pnl ol" id="fp-out"><header class="pnl-h"><span class="pnl-t"><i class="pnl-dot"></i>Savings outlook</span><span class="pnl-m">where Pay myself is heading</span><span class="pnl-tools">'+hz+'</span></header><div class="pnl-b">'+
+      '<div class="ol-in">'+
+        '<div class="fld" data-out="base"><span class="lbl">Base salary</span>'+money(O.base)+'</div>'+
+        '<div class="fld" data-out="next"><span class="lbl">Salary on 20 '+esc(nm.name)+'</span>'+money(O.next,'','Same as base')+'</div>'+
+        '<div class="fld"><span class="lbl">Spending in the coming months, against this month</span>'+lvSeg+'</div>'+
+      '</div>'+
+      '<div class="ol-stats" id="ol-stats"></div>'+
+      '<div class="ol-chart" id="ol-chart"></div>'+
+      '<div class="legend sm"><span><i class="sw c1"></i>Most likely</span><span><i class="sw ol-bandsw"></i>Likely range (8 in 10 futures)</span><span><i class="sw ol-plansw"></i>Planned expense</span></div>'+
+      '<p class="ol-month" id="ol-month"></p>'+
+      '<div class="ol-sub"><div class="ol-subh"><span class="lbl">Planned expenses</span><label class="fp-logged ol-lumps" data-out="lumps"><input type="checkbox"'+(O.lumps?' checked':'')+'> Allow for surprise buys</label></div>'+
+        planned+'<div class="fp-foot"><button type="button" class="btn sm" data-add="plan">+ Add planned expense</button><span class="fp-tot" id="ol-lumpnote"></span></div></div>'+
+      '<details class="notes ol-tbl"><summary>Month by month</summary><div class="tbl-w"><table class="tbl" id="ol-table"></table></div></details>'+
+    '</div></section>';
+  }
+
+  var UIref=null;
+  function drawOutlook(I,C){
+    var box=$('#ol-chart');if(!box) return;
+    var S=simulate(I,C),O=S.O,P=S.P,B=S.band,rows=S.rows,H=rows.length,last=B[H-1];
+    var monthly=rows[H>1?1:0].save;
+    // the typical month, from where the most likely line goes (planned expenses left out)
+    var gain=(last.p50-S.start.bal+rows.reduce(function(a,r){return a+r.planned;},0)-(rows[0].salary-O.base))/H;
+    var tile=function(k,v,sub,cls){return '<div><span>'+esc(k)+'</span><b class="'+(cls||'')+'">'+v+'</b><small>'+sub+'</small></div>';};
+    $('#ol-stats').innerHTML=
+      tile('Pay myself by '+rows[H-1].m.name+' '+rows[H-1].m.year,esc(fmt(r100(last.p50))),'likely, from '+esc(fmt(r100(S.start.bal)))+' now')+
+      tile('Saved a month, likely',esc(fmtS(r100(gain))),'plan alone: '+esc(fmtS(r100(monthly)))+(O.lumps&&S.lam>0?', before surprise buys':''),gain<0?'neg':'')+
+      tile('Likely range',esc(K(last.p10))+' – '+esc(K(last.p90)),'8 in 10 futures land here');
+    $('#ol-month').innerHTML='Each month: salary '+esc(fmt(O.base))+' − Mama '+esc(fmt(P.mama))+' − Touheed '+esc(fmt(P.touheed))+' − bills '+esc(fmt(P.bills))+
+      ' − food '+esc(fmt(r100(P.parts.food*S.lv)))+' ('+P.foodSrc+') − shopping '+esc(fmt(r100(P.parts.shop*S.lv)))+' ('+P.shopSrc+') − essentials '+esc(fmt(r100(P.parts.ess*S.lv)))+' − InDrive '+esc(fmt(r100(P.parts.ride*S.lv)))+
+      ' = <b>'+esc(fmtS(r100(monthly+0)))+'</b> saved'+(S.start.dip<0?'. This month’s shortfall of about '+esc(fmt(r100(-S.start.dip)))+' comes out first.':'.');
+    $('#ol-lumpnote').textContent=O.lumps&&S.lam>0?'Surprise buys of Rs 10,000+: about '+(Math.round(S.lam*10)/10)+' a month, '+K(S.lumpAvg)+' each':'';
+    // chart
+    var W=Math.max(280,box.clientWidth),Hh=W<520?220:260,pl=46,pr=14,pt=14,pb=28,iw=W-pl-pr,ih=Hh-pt-pb;
+    var lo=Math.min(0,S.start.bal,Math.min.apply(null,B.map(function(b){return b.p10;}))),hi=Math.max(S.start.bal,Math.max.apply(null,B.map(function(b){return b.p90;})));
+    var top=Viz.niceMax(hi*1.05),bot=lo<0?-Viz.niceMax(-lo*1.1):0;
+    var X=function(i){return pl+iw*i/H;},Y=function(v){return pt+ih*(1-(v-bot)/(top-bot));};
+    var g='',ticks=4;
+    for(var t=0;t<=ticks;t++){var v=bot+(top-bot)*t/ticks;g+='<line class="ol-grid'+(Math.abs(v)<1e-6?' zero':'')+'" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+Y(v).toFixed(1)+'" y2="'+Y(v).toFixed(1)+'"/><text class="ol-ax" x="'+(pl-6)+'" y="'+(Y(v)+3.5).toFixed(1)+'" text-anchor="end">'+esc(K(v))+'</text>';}
+    if(bot<0) g+='<line class="ol-grid zero" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+Y(0).toFixed(1)+'" y2="'+Y(0).toFixed(1)+'"/>';
+    var pts=[{x:X(0),p10:S.start.bal,p90:S.start.bal,p50:S.start.bal}].concat(B.map(function(b,i){return {x:X(i+1),p10:b.p10,p90:b.p90,p50:b.p50};}));
+    var band='M'+pts.map(function(p){return p.x.toFixed(1)+','+Y(p.p90).toFixed(1);}).join('L')+'L'+pts.slice().reverse().map(function(p){return p.x.toFixed(1)+','+Y(p.p10).toFixed(1);}).join('L')+'Z';
+    var line='M'+pts.map(function(p){return p.x.toFixed(1)+','+Y(p.p50).toFixed(1);}).join('L');
+    var xl='<text class="ol-ax" x="'+X(0)+'" y="'+(Hh-8)+'" text-anchor="start">Now</text>',step=W<520&&H>6?2:1;
+    rows.forEach(function(r,i){if((i+1)%step) return;var lab=r.m.name+(r.m.name==='Jan'?' ’'+String(r.m.year).slice(2):'');xl+='<text class="ol-ax" x="'+X(i+1).toFixed(1)+'" y="'+(Hh-8)+'" text-anchor="'+(i===H-1?'end':'middle')+'">'+esc(lab)+'</text>';});
+    var marks=rows.map(function(r,i){if(!r.planned) return '';var x=X(i+1).toFixed(1);
+      return '<line class="ol-pl" x1="'+x+'" x2="'+x+'" y1="'+pt+'" y2="'+(pt+ih)+'"/><rect class="ol-plm" x="'+(+x-4)+'" y="'+(pt+ih-4)+'" width="8" height="8" rx="1" transform="rotate(45 '+x+' '+(pt+ih)+')"/>';}).join('');
+    box.innerHTML='<svg width="'+W+'" height="'+Hh+'" viewBox="0 0 '+W+' '+Hh+'" role="img" aria-label="Projected Pay myself balance">'+g+marks+
+      '<path class="ol-band" d="'+band+'"/><path class="ol-line" d="'+line+'"/>'+
+      '<circle class="ol-dot" cx="'+X(0)+'" cy="'+Y(S.start.bal).toFixed(1)+'" r="4"/>'+
+      '<circle class="ol-end" cx="'+X(H).toFixed(1)+'" cy="'+Y(last.p50).toFixed(1)+'" r="4"/>'+
+      '<line class="ol-cross" id="ol-cross" y1="'+pt+'" y2="'+(pt+ih)+'" hidden/><circle class="ol-hov" id="ol-hov" r="5" hidden/>'+
+      xl+'<rect class="ol-hit" x="'+pl+'" y="0" width="'+iw+'" height="'+(pt+ih)+'"/></svg>';
+    var hit=$('.ol-hit',box),cross=$('#ol-cross'),hov=$('#ol-hov');
+    var move=function(e){
+      var rc=box.getBoundingClientRect(),x=e.clientX-rc.left,i=Math.max(0,Math.min(H,Math.round((x-pl)/iw*H)));
+      var p=pts[i],cx=p.x.toFixed(1);
+      cross.setAttribute('x1',cx);cross.setAttribute('x2',cx);cross.removeAttribute('hidden');
+      hov.setAttribute('cx',cx);hov.setAttribute('cy',Y(p.p50).toFixed(1));hov.removeAttribute('hidden');
+      var h;
+      if(i===0) h='<div class="tt-h">Now</div><div class="tt-b">Pay myself '+esc(fmt(S.start.bal))+(S.start.dip<0?'<br>after this month’s shortfall of '+esc(fmt(-S.start.dip)):'')+'</div>';
+      else{var r=rows[i-1];h='<div class="tt-h">End of '+esc(r.m.name+' '+r.m.year)+' cycle</div><div class="tt-b">Likely '+esc(fmt(r100(p.p50)))+'<br>Range '+esc(fmt(r100(p.p10)))+' – '+esc(fmt(r100(p.p90)))+
+        '<br>Salary '+esc(fmt(r.salary))+' · saved about '+esc(fmtS(r100(r.saveP50)))+(r.planned?'<br>Planned: '+esc(fmt(r.planned)):'')+'</div>';}
+      if(UIref) UIref.showTip(h,e.clientX,e.clientY);
+    };
+    hit.addEventListener('pointermove',move);hit.addEventListener('pointerdown',move);
+    hit.addEventListener('pointerleave',function(){cross.setAttribute('hidden','');hov.setAttribute('hidden','');if(UIref) UIref.hideTip();});
+    // month by month
+    $('#ol-table').innerHTML='<thead><tr><th>Cycle</th><th class="n">Salary</th><th class="n">Mama + Touheed</th><th class="n">Bills</th><th class="n">Spending</th><th class="n">Planned</th><th class="n">Saved (likely)</th><th class="n">Pay myself (likely)</th></tr></thead><tbody>'+
+      rows.map(function(r,i){return '<tr><td>'+esc(r.m.name+' '+r.m.year)+'</td><td class="n">'+esc(fmt(r.salary))+'</td><td class="n">'+esc(fmt(r.mama+r.touheed))+'</td><td class="n">'+esc(fmt(r.bills))+'</td><td class="n">'+esc(fmt(r100(r.spend)))+'</td><td class="n">'+(r.planned?esc(fmt(r.planned)):'–')+'</td><td class="n">'+esc(fmtS(r100(r.saveP50)))+'</td><td class="n">'+esc(fmt(r100(B[i].p50)))+'</td></tr>';}).join('')+'</tbody>';
   }
 
   return {view:view,draw:draw,_model:model,_compute:compute,_inputs:inputs};
