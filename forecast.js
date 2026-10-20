@@ -1,199 +1,285 @@
-/* Forecast: will this month's Pay myself stay untouched until payday?
+/* Forecast: can this month's Pay myself stay untouched until payday?
 
-   Pay myself is the savings set aside on payday. Column G's Remaining is what is
-   left after it, so the question is whether the days until the latest possible
-   payday (the 20th of next month) can be paid for out of Remaining, after the
-   bills still due, without dipping into Pay myself.
-
-   Spending until payday is simulated from your own history:
-   - everyday spending (food, getting around, personal) by a moving-block bootstrap:
-     random 7-day stretches of your past days, recent weeks weighted more (half-life
-     60 days), stretches with nothing logged skipped;
-   - one-off buys of Rs 3,000 or more as a compound Poisson process (how often and
-     how big, both from history).
-   Touheed, Mama, savings, transfers and renovation are not part of this spending. */
+   A small budget for the rest of the current payday cycle (today until the 20th of
+   next month, the latest payday). Column G's Remaining is the money there is, Pay
+   myself already set aside. From it come:
+   - bills and subscriptions still to pay (amounts editable, defaults from the sheet);
+   - InDrive, at your low, average or high rate from past months;
+   - a cap for shopping and personal care, and one for everything else;
+   and what is left is the food budget. Or set the food budget and the rest is what
+   shopping can use.
+   Advances to Touheed or Mama come out of Pay myself, not this budget, and come back
+   at the next payday, when that much less is owed.
+   Inputs are kept in this browser. */
 var Forecast=(function(){
-  var L=window.Ledger,esc=L.esc,fmt=L.fmt,fmtS=L.fmtS,K=Viz.kfmt,DAY=Logic.DAY,MON=Logic.MON;
+  var L=window.Ledger,esc=L.esc,fmt=L.fmt,fmtS=L.fmtS,DAY=Logic.DAY,MON=Logic.MON;
   function $(s,r){return (r||document).querySelector(s);}
-  var LUMP=3000,HL=60,SIMS=4000;
-  var TOUHEED=/tou?heed|tohid/;
+  function $$(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s));}
+  var KEY='ledger.forecast.v2';
+  var PEOPLE=[{key:'touheed',label:'Touheed',what:'transport fee',fee:27000},{key:'mama',label:'Mama',what:'groceries',fee:35000}];
+  var RIDE_LV=[{k:'low',t:'Low'},{k:'avg',t:'Average'},{k:'high',t:'High'}];
+  var BILL_RE=/claude|internet|amazon|youtube|netflix|subscri/;
+
+  // ---------------------------------------------------------------- saved inputs
+  var st=null;
+  function load(){
+    if(st) return st;
+    try{st=JSON.parse(localStorage.getItem(KEY)||'null');}catch(e){st=null;}
+    if(!st||typeof st!=='object') st={};
+    st.bills=st.bills||{};st.adv=st.adv||{};st.fees=st.fees||{};
+    return st;
+  }
+  function save(){try{localStorage.setItem(KEY,JSON.stringify(st));}catch(e){}}
+  function amt(v){var n=Logic.num(v);return n==null||!isFinite(n)?0:Math.max(0,Math.round(n));}
+  function r100(x){return Math.round(x/100)*100;}
+  function fmtDay(n){var d=new Date(n*DAY);return d.getUTCDate()+' '+MON[d.getUTCMonth()];}
+  function median(a){if(!a.length) return 0;a=a.slice().sort(function(x,y){return x-y;});var m=a.length>>1;return a.length%2?a[m]:(a[m-1]+a[m])/2;}
+  function mean(a){return a.length?a.reduce(function(s,x){return s+x;},0)/a.length:0;}
 
   // ---------------------------------------------------------------- history
-  function bucket(t){
-    var c=t.cat,s=(t.name+' '+t.desc).toLowerCase();
-    if(c==='savings'||c==='transfer') return null;
-    if(c==='influx') return TOUHEED.test(s)?'touheed':null;
-    if(TOUHEED.test(s)) return 'touheed';
-    // office transport is paid to Touheed whatever category it was logged under
-    if(!/in\s*-?\s*drive|courier/.test(s)&&(/\btransport\b|advance pay|extra charge|car fuel|car feul/.test(s)||(c==='transport'&&/weekend|early payment|prepaid/.test(s)))) return 'touheed';
-    if(c==='renovation') return 'renovation';
-    if(c==='family/home') return 'family';
-    if(t.amt>=5000&&/\b(mama|amma|mother|mom)\b/.test(s)) return 'family';
-    if(t.amt>0&&(/claude|internet|amazon|youtube|netflix/.test(s)||(/foodpanda/.test(s)&&/subscri/.test(s)&&c!=='food'))) return 'bills';
-    if(c==='food') return 'food';
-    if(c==='transport') return 'around';
-    return 'personal';
-  }
-  var VB=['food','around','personal'];
-  function median(a){if(!a.length) return 0;a=a.slice().sort(function(x,y){return x-y;});var m=a.length>>1;return a.length%2?a[m]:(a[m-1]+a[m])/2;}
-  function q(sorted,p){if(!sorted.length) return 0;var i=(sorted.length-1)*p,lo=Math.floor(i),hi=Math.ceil(i);return sorted[lo]+(sorted[hi]-sorted[lo])*(i-lo);}
-  function history(M,end){
-    var cyc=Logic.cyclePeriods(M.parsed,M.today);
-    if(!cyc.length) return null;
-    var first=cyc[0].start;
-    end=end!=null?end:M.today;
-    if(end-first<21) return null;
-    var start=Math.max(first,end-240),N=end-start,days=[],lumps=[],logged=[];
-    for(var i=0;i<N;i++){days.push([0,0,0]);logged.push(false);}
-    M.all.forEach(function(t){
-      if(t.day==null||t.day<start||t.day>=end) return;
-      logged[t.day-start]=true;
-      if(!(t.amt>0)) return;
-      var bi=VB.indexOf(bucket(t));
-      if(bi<0) return;
-      // a catch-up row ("2 week chaos", "untracked days") is ordinary spending of unlogged days, not an impulse buy
-      if(t.amt>=LUMP&&!/untrack|could not track|chaos/.test((t.name+' '+t.desc).toLowerCase())) lumps.push({age:end-1-t.day,amt:t.amt,b:bi,name:t.name,w:0});
-      else if(t.amt<LUMP) days[t.day-start][bi]+=t.amt;
-    });
-    // Stretches of 4+ days with nothing logged are gaps, not cheap days: leave them out.
-    var gap=[];
-    for(var g=0;g<N;){
-      if(logged[g]){gap.push(false);g++;continue;}
-      var e=g;while(e<N&&!logged[e]) e++;
-      for(var x=g;x<e;x++) gap.push(e-g>=4);
-      g=e;
+  // Per-day spend of each closed cycle, for food, shopping, InDrive and everything else.
+  function rates(cyc,rides){
+    var out=[];
+    for(var i=Math.max(0,cyc.length-7);i<cyc.length-1;i++){
+      var c=cyc[i],len=cyc[i+1].start-c.start;
+      if(len<14) continue;
+      var food=0,shop=0,other=0;
+      c.tx.forEach(function(t){
+        if(!(t.amt>0)) return;
+        var cat=t.cat,s=(t.name+' '+t.desc).toLowerCase();
+        if(cat==='food'){food+=t.amt;return;}
+        if(cat==='shopping'){shop+=t.amt;return;}
+        // not everyday spending: savings, money moved, Touheed, Mama, renovation, catch-up rows, bills
+        if(/^(savings|transfer|influx|loaned|family\/home|renovation|untracked)$/.test(cat)) return;
+        if(/tou?heed|tohid|\bmama\b|advance pay|\btransport\b/.test(s)||BILL_RE.test(s)) return;
+        // one-off buys of 10,000 or more (an oven, a course) are not the usual month
+        if(t.amt>=10000) return;
+        if(/in\s*-?\s*drive/.test(s)||cat==='transport') return;
+        other+=t.amt;
+      });
+      out.push({name:c.name,len:len,food:food/len,shop:shop/len,other:other/len,ride:rides[i].total/len,rideTot:rides[i].total});
     }
-    var blocks=[];
-    for(var s=0;s+7<=N;s++){
-      var f=0,a=0,p=0,bad=false;
-      for(var d=s;d<s+7;d++){if(gap[d]){bad=true;break;}f+=days[d][0];a+=days[d][1];p+=days[d][2];}
-      if(!bad) blocks.push({f:f,a:a,p:p,t:f+a+p,w:Math.pow(0.5,(N-1-(s+3))/HL)});
-    }
-    var wd=0;for(var d2=0;d2<N;d2++) if(!gap[d2]) wd+=Math.pow(0.5,(N-1-d2)/HL);
-    var wl=0;lumps.forEach(function(l){l.w=Math.pow(0.5,l.age/HL);wl+=l.w;});
-    if(blocks.length<3) return null;
-    return {start:start,end:end,N:N,blocks:blocks,lumps:lumps,rate:wd?wl/wd:0,gaps:gap.filter(Boolean).length};
+    return out;
   }
-  function prep(H){
-    var cum=[],c=0;H.blocks.forEach(function(b){c+=b.w;cum.push(c);});
-    var lc=[],lt=0;H.lumps.forEach(function(l){lt+=l.w;lc.push(lt);});
-    return {bl:H.blocks,cum:cum,tot:c,lumps:H.lumps,lc:lc,lt:lt,rate:H.rate};
-  }
-  function rng(seed){var a=seed>>>0;return function(){a=(a+0x6D2B79F5)>>>0;var t=a;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296;};}
-  function pick(cum,tot,r){var x=r()*tot,lo=0,hi=cum.length-1;while(lo<hi){var m=(lo+hi)>>1;if(cum[m]<x) lo=m+1;else hi=m;}return lo;}
-  function poisson(lam,r){if(lam<=0) return 0;var Lm=Math.exp(-lam),k=0,p=1;do{k++;p*=r();}while(p>Lm&&k<60);return k-1;}
-  function simVar(P,len,r,out){
-    var f=0,a=0,p=0,left=len;
-    if(P.bl.length) while(left>0){var b=P.bl[pick(P.cum,P.tot,r)],take=Math.min(7,left),k=take/7;f+=b.f*k;a+=b.a*k;p+=b.p*k;left-=take;}
-    var l=0,n=P.lumps.length?poisson(P.rate*len,r):0;
-    for(var i=0;i<n;i++) l+=P.lumps[pick(P.lc,P.lt,r)].amt;
-    out[0]=f;out[1]=a;out[2]=p;out[3]=l;
-    return f+a+p+l;
+  // low / high average: the mean of the cheaper and of the dearer half of past months
+  function rideLevels(h){
+    var a=h.map(function(x){return x.ride;}).sort(function(x,y){return x-y;}),n=a.length,half=Math.max(1,Math.floor(n/2));
+    return {low:mean(a.slice(0,half)),avg:mean(a),high:mean(a.slice(n-half))};
   }
 
-
-  // ---------------------------------------------------------------- this month
-  function fmtDay(n){var d=new Date(n*DAY);return d.getUTCDate()+' '+MON[d.getUTCMonth()];}
-  function r100(x){return Math.round(x/100)*100;}
-  function month(M){
+  // ---------------------------------------------------------------- model
+  function model(M){
     var cyc=Logic.cyclePeriods(M.parsed,M.today);
     if(!cyc.length) return {msg:'No payday cycles in the Tracking tab yet.'};
     var i=cyc.length-1,cur=cyc[i];
-    var saved=cur.tx.filter(function(t){return t.cat==='savings';}).reduce(function(s,t){return s+t.amt;},0);
-    if(!(saved>0)) return {cur:cur,msg:'Add a Pay myself row to '+cur.name+' and this tab will tell you whether you can keep it untouched until payday.'};
-    if(!cur.bal) return {cur:cur,msg:'This needs the Remaining row in column G of '+cur.name+'.'};
-    var sub=Logic.subscriptions(cyc,i);
-    var fb=Logic.foodBudget(cur,cur.bal,sub,M.today);
-    if(!fb||fb.days<1) return {cur:cur,msg:'Payday has passed. Add the new month to the sheet to see its forecast.'};
-    var H=history(M);
-    if(!H) return {cur:cur,msg:'Not enough history yet: the forecast needs about three weeks of entries.'};
-    var days=fb.days,avail=fb.remaining-fb.due;
-    var P=prep(H),r=rng(cur.start*7919+M.all.length),out=[0,0,0,0];
-    var food=[],other=[],tot=[];
-    for(var s=0;s<SIMS;s++){var t=simVar(P,days,r,out);food.push(out[0]);other.push(out[1]+out[2]+out[3]);tot.push(t);}
-    var asc=function(a,b){return a-b;};
-    food.sort(asc);other.sort(asc);tot.sort(asc);
-    var ok=0;for(var k=0;k<SIMS;k++) if(tot[k]<=avail) ok++;
-    var foodNeed=r100(q(food,0.5));
-    // when the money cannot cover usual food, food gets all of it and nothing is left over
-    var foodAlloc=Math.min(foodNeed,Math.max(0,avail)),bufAlloc=Math.max(0,avail-foodAlloc);
-    var dip=function(p){return Math.max(0,q(tot,p)-avail);};
-    var dueBills=sub.rows.filter(function(x){return x.status==='due'&&(x.when==null||x.when<fb.payday);});
-    return {cur:cur,saved:saved,fb:fb,days:days,avail:avail,dueBills:dueBills,p:ok/SIMS,
-      foodNeed:foodNeed,food:foodAlloc,buffer:bufAlloc,otherUsual:r100(q(other,0.5)),spend:{p10:q(tot,0.1),p50:q(tot,0.5),p90:q(tot,0.9)},
-      dip:{p10:dip(0.1),p50:dip(0.5),p90:dip(0.9)},cap:Math.max(0,avail)/days,usualDay:q(tot,0.5)/days,
-      lastDay:fb.payday-1,histDays:H.N,lumpRate:H.rate};
+    if(!cur.bal) return {msg:'This needs the Remaining row in column G of '+cur.name+'.'};
+    var pay=paydayAfter(cur,M.today),days=Math.max(1,pay-Math.max(M.today,cur.start));
+    if(pay-cur.start>45) return {msg:'Payday has passed. Add the new month to the sheet to see its forecast.'};
+    var s=load(),id=String(cur.start);
+    var h=rates(cyc,Logic.rides(cyc));
+    if(!h.length) return {msg:'Not enough history yet: the forecast needs at least one full month of entries.'};
+    var saved=cur.tx.filter(function(t){return t.cat==='savings';}).reduce(function(a,t){return a+t.amt;},0);
+    var sub=Logic.subscriptions(cyc,i),bs=s.bills[id]||{};
+    var bills=sub.rows.map(function(r){
+      var o=bs[r.key]||{};
+      return {key:r.key,label:r.label,paid:r.status==='paid',when:r.when,def:Math.round(r.amount),
+        amt:o.amt!=null?o.amt:Math.round(r.amount),on:o.on!=null?o.on:r.status!=='paid'};
+    });
+    (bs._extra||[]).forEach(function(x,j){bills.push({key:'x'+j,label:x.label||'',extra:true,amt:x.amt||0,on:true});});
+    var lv=rideLevels(h),usual={food:median(h.map(function(x){return x.food;})),shop:mean(h.map(function(x){return x.shop;})),other:median(h.map(function(x){return x.other;}))};
+    var prevId=i>0?String(cyc[i-1].start):null;
+    return {cur:cur,id:id,prev:i>0?cyc[i-1]:null,prevAdv:prevId?s.adv[prevId]||null:null,days:days,pay:pay,lastDay:pay-1,
+      remaining:cur.bal.remaining,saved:saved,bills:bills,hist:h,lv:lv,usual:usual,
+      def:{shop:r100(usual.shop*days),other:r100(usual.other*days),foodDay:r100(usual.food)}};
+  }
+  function paydayAfter(p,today){
+    var d=new Date(p.start*DAY),y=d.getUTCFullYear(),m=d.getUTCMonth()+1;
+    var pay=Math.round(Date.UTC(y,m,Logic.PAYDAY_DOM)/DAY);
+    while(pay<=today){m++;pay=Math.round(Date.UTC(y,m,Logic.PAYDAY_DOM)/DAY);}
+    return pay;
+  }
+  function inputs(R){
+    var s=load();
+    return {mode:s.mode==='shop'?'shop':'food',ride:s.ride||'avg',
+      shop:s.shop!=null?s.shop:R.def.shop,other:s.other!=null?s.other:R.def.other,foodDay:s.foodDay!=null?s.foodDay:R.def.foodDay,
+      adv:s.adv[R.id]||{},fees:s.fees};
+  }
+  // the whole budget, from Remaining down to what food (or shopping) can use
+  function compute(R,I){
+    var bills=R.bills.reduce(function(a,b){return a+(b.on?b.amt:0);},0);
+    var ride=r100(R.lv[I.ride]*R.days);
+    var advIn=0,adv=0;
+    PEOPLE.forEach(function(p){var a=I.adv[p.key]||{};adv+=a.amt||0;if(a.logged) advIn+=a.amt||0;});
+    // an advance already logged in the sheet lowered Remaining, but it is paid out of Pay myself
+    var money=R.remaining+advIn;
+    var base=money-bills-ride-I.other;
+    var food,shop,left;
+    if(I.mode==='food'){shop=I.shop;food=base-shop;left=food;}
+    else{food=I.foodDay*R.days;shop=base-food;left=shop;}
+    return {money:money,advIn:advIn,adv:adv,bills:bills,ride:ride,other:I.other,shop:shop,food:food,left:left,kept:R.saved-adv};
   }
 
+  // ---------------------------------------------------------------- view
   var R=null;
+  function money(v,cls){return '<span class="fp-in'+(cls?' '+cls:'')+'"><span>Rs</span><input class="inline" inputmode="numeric" autocomplete="off" value="'+esc(v?Math.round(v).toLocaleString('en-US'):'0')+'"></span>';}
   function view(M,ui){
-    R=month(M);
+    R=model(M);
     if(R.msg) return '<section class="pnl"><div class="pnl-b"><div class="empty">'+esc(R.msg)+'</div></div></section>';
-    var p=R.p,lv=R.avail<=0?'critical':p>=0.75?'good':p>=0.45?'warning':'critical';
-    var word=R.avail<=0?'Already touched':p>=0.75?'Likely untouched':p>=0.45?'Tight':'At risk';
-    var icon={good:'\u2713',warning:'!',critical:'\u2715'}[lv];
-    var until=fmtDay(R.lastDay);
-    // start from the same Remaining the Overview shows, then take off the bills it has to cover
-    var held=R.fb.due>0?' Your Remaining is '+fmt(R.fb.remaining)+', but '+fmt(R.fb.due)+' of it is needed for bills before payday.':' Your Remaining is '+fmt(R.fb.remaining)+'.';
-    var lead=R.avail<=0
-      ?held.slice(1)+' That is more than what is left, so about '+fmt(-R.avail)+' would have to come out of your Pay myself.'
-      :held.slice(1)+' That leaves '+fmt(R.avail)+' to spend over the next '+R.days+(R.days===1?' day':' days')+' (today to '+until+'). Based on how you usually spend, there is a '+Math.round(p*100)+'% chance that is enough.'+
-        (R.dip.p50>0?' Spending as usual (about '+fmt(R.spend.p50)+') would take about '+fmt(r100(R.dip.p50))+' out of your Pay myself.':'');
-    var bar='';
-    if(R.avail>0){
-      var bpct=R.buffer/R.avail*100,fpct=R.food/R.avail*100;
-      bar='<div class="m-bar"><i class="f" style="width:'+fpct.toFixed(1)+'%"></i>'+(bpct>0?'<i class="b" style="width:'+bpct.toFixed(1)+'%"></i>':'')+'</div>'+
-        '<div class="legend sm"><span><i class="sw c1"></i>Food</span><span><i class="sw m-b"></i>Everything else</span></div>';
+    var I=inputs(R),until=fmtDay(R.lastDay);
+    var bills=R.bills.map(function(b){
+      return '<div class="fp-row fp-bill'+(b.on?'':' off')+'" data-bill="'+esc(b.key)+'">'+
+        '<label class="fp-chk"><input type="checkbox"'+(b.on?' checked':'')+' aria-label="Still to pay"></label>'+
+        '<div class="fp-name">'+(b.extra?'<input class="inline fp-lbl" value="'+esc(b.label)+'" placeholder="Bill name" aria-label="Bill name">':esc(b.label))+
+          '<small>'+(b.paid?'paid'+(b.when!=null?' '+esc(fmtDay(b.when)):'')+' · already out of Remaining':b.extra?'added by you':'due'+(b.when!=null?' '+esc(fmtDay(b.when)):''))+'</small></div>'+
+        money(b.amt)+(b.extra?'<button type="button" class="x fp-del" aria-label="Remove">&times;</button>':'')+'</div>';
+    }).join('');
+    var lv=R.lv,rideSeg='<div class="seg fp-seg" role="group" aria-label="InDrive estimate">'+RIDE_LV.map(function(x){
+      return '<button type="button" data-ride="'+x.k+'" aria-pressed="'+(I.ride===x.k)+'">'+x.t+'<small>'+esc(fmt(r100(lv[x.k]*R.days)))+'</small></button>';}).join('')+'</div>';
+    var hist=R.hist.map(function(x){return '<span>'+esc(x.name.slice(0,3))+' <b>'+esc(fmt(x.rideTot))+'</b> <small>'+esc(fmt(x.ride))+'/day</small></span>';}).join('');
+    var adv=PEOPLE.map(function(p){
+      var a=I.adv[p.key]||{},fee=I.fees[p.key]!=null?I.fees[p.key]:p.fee;
+      return '<div class="fp-adv" data-adv="'+p.key+'">'+
+        '<div class="fp-name">'+esc(p.label)+'<small>'+esc(p.what)+'</small></div>'+
+        '<div class="fld"><span class="lbl">Usual payment</span>'+money(fee,'fp-fee')+'</div>'+
+        '<div class="fld"><span class="lbl">Advance this month</span>'+money(a.amt||0,'fp-amt')+'</div>'+
+        '<label class="fp-logged"><input type="checkbox"'+(a.logged?' checked':'')+'> Already logged in the sheet</label>'+
+        '<p class="fp-next" data-next="'+p.key+'"></p></div>';
+    }).join('');
+    var prev='';
+    if(R.prevAdv){
+      prev=PEOPLE.map(function(p){var a=R.prevAdv[p.key];if(!a||!a.amt) return '';
+        var fee=I.fees[p.key]!=null?I.fees[p.key]:p.fee;
+        return '<li>'+esc(p.label)+' got '+esc(fmt(a.amt))+' in advance in '+esc(R.prev.name)+', so this payday’s '+esc(p.what)+' was '+esc(fmt(Math.max(0,fee-a.amt)))+' instead of '+esc(fmt(fee))+'.</li>';}).join('');
+      if(prev) prev='<ul class="fp-prev">'+prev+'</ul>';
     }
-    var diff=R.buffer-R.otherUsual,short=R.food<R.foodNeed;
-    var foodNote=short
-      ?'Your usual food over '+R.days+' days is about '+fmt(R.foodNeed)+', more than you have, so food gets all of it.'
-      :'What you usually spend on food over '+R.days+' days. Keep food to this.';
-    var bufNote=R.buffer<=0?'Nothing is left for anything else. You usually spend about '+fmt(R.otherUsual)+' on other things in '+R.days+' days.':diff>=0
-      ?'You usually spend about '+fmt(R.otherUsual)+' on other things in '+R.days+' days, so this leaves about '+fmt(diff)+' spare.'
-      :'You usually spend about '+fmt(R.otherUsual)+' on other things in '+R.days+' days. Keep it to '+fmt(R.buffer)+', about '+fmt(-diff)+' less than usual.';
-    // where the likely spend sits against the money available
-    var s=R.spend,mx=Math.max(s.p90,R.avail,1)*1.08,X=function(v){return Math.max(0,Math.min(100,v/mx*100));};
-    var range='<div class="m-range"><div class="m-track"><i class="m-r" style="left:'+X(s.p10)+'%;width:'+(X(s.p90)-X(s.p10))+'%"></i><i class="m-m" style="left:'+X(s.p50)+'%"></i>'+
-      (R.avail>0?'<i class="m-a" style="left:'+X(R.avail)+'%"><span>After bills '+esc(K(R.avail))+'</span></i>':'')+'</div>'+
-      '<div class="m-scale"><span>0</span><span>'+esc(K(mx))+'</span></div></div>';
-    var bills=R.dueBills.map(function(b){return '<div class="sub"><dt>'+esc(b.label)+(b.when!=null?' <small>'+esc(fmtDay(b.when))+'</small>':'')+'</dt><dd>\u2212'+esc(fmt(b.amount))+'</dd></div>';}).join('');
-    return '<div class="month">'+
-      '<section class="pnl m-hero m-'+lv+'"><div class="pnl-b">'+
-        '<div class="m-q">Will your Pay myself of <b>'+esc(fmt(R.saved))+'</b> stay untouched until '+esc(until)+'?</div>'+
-        '<div class="m-v"><span class="m-pill"><b>'+icon+'</b>'+esc(word)+'</span>'+(R.avail>0?'<span class="m-pct">'+Math.round(p*100)+'<small>% chance</small></span>':'')+'</div>'+
-        '<p class="m-lead">'+esc(lead)+'</p>'+
+    return '<div class="plan" id="fp">'+
+      '<section class="pnl m-hero fp-hero" id="fp-hero"><div class="pnl-b">'+
+        '<div class="fp-top"><div class="m-q">Can your Pay myself of <b id="fp-saved">'+esc(fmt(R.saved))+'</b> stay untouched until '+esc(until)+'?</div>'+
+          '<div class="seg" role="group" aria-label="What to work out"><button type="button" data-mode="food" aria-pressed="'+(I.mode==='food')+'">Food budget</button><button type="button" data-mode="shop" aria-pressed="'+(I.mode==='shop')+'">Shopping budget</button></div></div>'+
+        '<div class="m-v"><span class="m-pill"><b id="fp-icon"></b><span id="fp-word"></span></span></div>'+
+        '<div class="fp-ans"><div><div class="m-k" id="fp-ans-k"></div><div class="m-big" id="fp-ans"></div><div class="m-day" id="fp-ans-d"></div></div>'+
+          '<div class="fp-food"'+(I.mode==='shop'?'':' hidden')+'><div class="fld"><span class="lbl">Food per day</span>'+money(I.foodDay,'food')+'</div><small>You usually spend about '+esc(fmt(R.usual.food))+' a day.</small></div></div>'+
+        '<p class="m-lead" id="fp-lead"></p>'+
+        '<dl class="ledger fp-sum" id="fp-sum"></dl>'+
       '</div></section>'+
-      (R.avail>0?
-      '<div class="m-split">'+
-        '<section class="pnl m-tile"><div class="pnl-b"><div class="m-k"><i class="sw c1"></i>Food</div><div class="m-big">'+esc(fmt(R.food))+'</div>'+
-          '<div class="m-day">'+esc(fmt(R.food/R.days))+' a day</div><p class="'+(short?'warn':'')+'">'+esc(foodNote)+'</p></div></section>'+
-        '<section class="pnl m-tile"><div class="pnl-b"><div class="m-k"><i class="sw m-b"></i>Everything else</div><div class="m-big'+(R.buffer<=0?' neg':'')+'">'+esc(fmt(R.buffer))+'</div>'+
-          '<div class="m-day">'+(R.buffer>0?esc(fmt(R.buffer/R.days))+' a day':'nothing left')+'</div><p class="'+(diff<0?'warn':'')+'">'+esc(bufNote)+'</p></div></section>'+
-      '</div>':'')+
-      '<div class="m-stats">'+
-        '<div><span>Daily limit</span><b>'+esc(fmt(R.cap))+'<small> /day</small></b></div>'+
-        '<div><span>You usually spend</span><b class="'+(R.usualDay>R.cap?'neg':'')+'">'+esc(fmt(R.usualDay))+'<small> /day</small></b></div>'+
-        (R.dip.p50>0
-          ?'<div><span>Likely taken from Pay myself</span><b class="neg">'+esc(fmt(r100(R.dip.p50)))+'</b></div>'
-          :'<div><span>Likely left at payday</span><b>'+esc(fmt(r100(R.avail-R.spend.p50)))+'</b></div>')+
+      '<div class="fp-grid">'+
+      ui.pnl('fp-bills','Bills and subscriptions','tick the ones still to pay',bills+
+        '<div class="fp-foot"><button type="button" class="btn sm" id="fp-add-bill">+ Add bill</button><span class="fp-tot">Still to pay <b id="fp-bills-t"></b></span></div>',{cls:''})+
+      ui.pnl('fp-caps','Caps','your limits until '+esc(until),
+        '<div class="fp-row" data-cap="shop"><div class="fp-name">Shopping and personal care<small>outfits, toiletries, gifts · you usually spend about '+esc(fmt(r100(R.usual.shop*R.days)))+'</small></div>'+money(I.shop)+'<span class="fp-calc" hidden></span></div>'+
+        '<div class="fp-row" data-cap="other"><div class="fp-name">Everything else<small>laundry, meds, repairs, fun · usually about '+esc(fmt(R.def.other))+'</small></div>'+money(I.other)+'</div>',{cls:''})+
+      ui.pnl('fp-ride','InDrive','your rate from past months × '+R.days+' days',rideSeg+'<div class="fp-hist">'+hist+'</div>'+
+        '<p class="fc-note">Low and high are the averages of your cheaper and dearer months. Rides you already took this month are in Remaining.</p>',{cls:''})+
+      ui.pnl('fp-adv','Advance payments','paid from Pay myself, back next payday',prev+adv,{cls:''})+
       '</div>'+
-      ui.pnl('m-money','Money until payday',esc(R.cur.name)+' \u00b7 column G',
-        '<dl class="ledger">'+
-          '<div><dt>Remaining (column G, same as Overview)</dt><dd>'+esc(fmtS(R.fb.remaining))+'</dd></div>'+
-          '<div><dt>Bills still due before payday</dt><dd>\u2212'+esc(fmt(R.fb.due))+'</dd></div>'+bills+
-          '<div class="tot"><dt>To spend until '+esc(until)+'</dt><dd>'+esc(fmtS(R.avail))+'</dd></div>'+
-          '<div><dt>Days, today to '+esc(until)+'</dt><dd>'+R.days+'</dd></div></dl>'+bar,{cls:''})+
-      ui.pnl('m-spend','Your likely spending until payday','',
-        '<p class="m-s">Most likely <b>'+esc(fmt(s.p50))+'</b>, usually between '+esc(fmt(s.p10))+' and '+esc(fmt(s.p90))+'.</p>'+range+
-        '<div class="legend sm"><span><i class="sw m-rs"></i>Likely range (8 in 10 months)</span><span><i class="sw m-ms"></i>Most likely</span><span><i class="sw m-as"></i>Money after bills</span></div>',{cls:''})+
+      '<div class="fp-reset"><button type="button" class="btn ghost sm" id="fp-reset">Reset to defaults</button></div>'+
       '<details class="notes"><summary>How this is worked out</summary>'+
-        '<p>Remaining comes from column G of '+esc(R.cur.name)+', which already has your Pay myself set aside. Bills still due before payday (Claude, internet, YouTube, Amazon, foodpanda) are taken off. Payday is taken as the 20th, the latest you usually get paid.</p>'+
-        '<p>Your spending is replayed from your own last '+R.histDays+' days: random week-long stretches stitched together, recent weeks counting more, '+SIMS.toLocaleString('en-US')+' times. One-off buys of Rs 3,000 or more (about '+(R.lumpRate*30).toFixed(1)+' a month lately) are added separately. The chance is how many of those replays fit in the money you have.</p>'+
-        '<p>Not counted here: Touheed\u2019s fee and loans, money for Mama, renovation and transfers. If you pay any of these before payday, they come out of the same money.</p></details>'+
+        '<p>Remaining comes from column G of '+esc(R.cur.name)+', with your Pay myself already set aside. Payday is taken as the 20th, the latest you usually get paid, so this covers '+R.days+' days, today to '+esc(until)+'.</p>'+
+        '<p>Bills you tick are taken off. Paid ones are already out of Remaining, so they start unticked. InDrive is your per-day rate from your last '+R.hist.length+' full months times the days left. The caps start at your usual spending for this many days, then whatever you set.</p>'+
+        '<p>An advance to Touheed or Mama is paid out of Pay myself, so it lowers what you keep this month but not this budget, and at the next payday you owe that much less. If you already logged it in the sheet, Remaining went down by it, so it is added back here.</p>'+
+        '<p>What you enter here is kept in this browser.</p></details>'+
     '</div>';
   }
-  function draw(){}
 
-  return {view:view,draw:draw,_month:month,_bucket:bucket};
+  function draw(){
+    var root=$('#fp');if(!root||!R||R.msg) return;
+    var s=load(),id=R.id;
+    function bucket(){return s.bills[id]=s.bills[id]||{};}
+    function adv(k){var a=s.adv[id]=s.adv[id]||{};return a[k]=a[k]||{};}
+    root.addEventListener('input',function(e){
+      var t=e.target,row=t.closest('[data-bill],[data-cap],[data-adv],.fp-food');
+      if(!row) return;
+      var v=amt(t.value);
+      if(row.dataset.bill!=null){
+        var k=row.dataset.bill,b=R.bills.find(function(x){return x.key===k;});
+        if(t.classList.contains('fp-lbl')){b.label=t.value;}else if(t.type!=='checkbox'){b.amt=v;}
+        storeBill(b);
+      }else if(row.dataset.cap){s[row.dataset.cap]=v;}
+      else if(row.dataset.adv){
+        var a=adv(row.dataset.adv);
+        if(t.type==='checkbox') a.logged=t.checked;
+        else if(t.closest('.fp-fee')) s.fees[row.dataset.adv]=v;
+        else a.amt=v;
+      }else s.foodDay=v;
+      save();update();
+    });
+    root.addEventListener('change',function(e){
+      var t=e.target;
+      if(t.type==='checkbox'&&t.closest('[data-bill]')){
+        var k=t.closest('[data-bill]').dataset.bill,b=R.bills.find(function(x){return x.key===k;});
+        b.on=t.checked;t.closest('.fp-row').classList.toggle('off',!b.on);storeBill(b);save();update();
+      }
+      // tidy the number once you leave the box
+      if(t.matches('.fp-in input')) t.value=amt(t.value).toLocaleString('en-US');
+    });
+    function storeBill(b){
+      var o=bucket();
+      if(b.extra){var j=+b.key.slice(1);o._extra=o._extra||[];o._extra[j]={label:b.label,amt:b.amt};}
+      else o[b.key]={amt:b.amt,on:b.on};
+    }
+    root.addEventListener('click',function(e){
+      var t=e.target.closest('button');if(!t) return;
+      if(t.dataset.mode){s.mode=t.dataset.mode;save();rerender();}
+      else if(t.dataset.ride){s.ride=t.dataset.ride;save();$$('[data-ride]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});update();}
+      else if(t.id==='fp-add-bill'){var o=bucket();o._extra=(o._extra||[]).concat([{label:'',amt:0}]);save();rerender(function(){var l=$$('.fp-lbl');if(l.length) l[l.length-1].focus();});}
+      else if(t.classList.contains('fp-del')){var j=+t.closest('[data-bill]').dataset.bill.slice(1),o2=bucket();o2._extra.splice(j,1);save();rerender();}
+      else if(t.id==='fp-reset'){
+        if(!confirm('Reset bills, caps and the InDrive choice to the defaults? Advances stay.')) return;
+        delete s.bills[id];delete s.shop;delete s.other;delete s.ride;delete s.foodDay;save();rerender();
+      }
+    });
+    update();
+  }
+  function rerender(then){
+    var y=window.scrollY;if(window.LedgerUI) LedgerUI.rerender();window.scrollTo(0,y);if(then) then();
+  }
+
+  function update(){
+    var I=inputs(R),C=compute(R,I),d=R.days,shopMode=I.mode==='shop';
+    var lv,word,icon,lead,k,big,per;
+    if(!shopMode){
+      var fd=C.food/d,u=R.usual.food;
+      lv=C.food<=0?'critical':fd>=u?'good':fd>=u*0.6?'warning':'critical';
+      word=C.food<=0?'Pay myself will be touched':lv==='good'?'Pay myself stays untouched':lv==='warning'?'Tight, but doable':'Food money is too thin';
+      k=C.food<=0?'Short by':'Food budget until '+fmtDay(R.lastDay);
+      big=Math.abs(C.food);per=C.food>0?fmt(fd)+' a day':'nothing left for food';
+      lead=C.food<=0
+        ?'Your bills, InDrive and caps already need '+fmt(-C.food)+' more than you have. That, and all your food, would come out of Pay myself. Lower a cap to make room.'
+        :lv==='good'?'Keep food under '+fmt(fd)+' a day and stick to your caps, and Pay myself stays untouched. You usually spend about '+fmt(u)+' a day on food.'
+        :'That is '+fmt(fd)+' a day for food, less than the '+fmt(u)+' you usually spend. Stay under it, or lower a cap, to keep Pay myself untouched.';
+    }else{
+      lv=C.shop<0?'critical':C.shop<r100(R.usual.shop*d)*0.5?'warning':'good';
+      word=C.shop<0?'Pay myself will be touched':lv==='good'?'Pay myself stays untouched':'Tight, but doable';
+      k=C.shop<0?'Short by':'Shopping and personal care until '+fmtDay(R.lastDay);
+      big=Math.abs(C.shop);per=C.shop>0?fmt(C.shop/d)+' a day':'nothing left for shopping';
+      lead=C.shop<0
+        ?'Food at '+fmt(I.foodDay)+' a day plus your bills, InDrive and other spending come to '+fmt(-C.shop)+' more than you have. That would come out of Pay myself, before any shopping.'
+        :'With food at '+fmt(I.foodDay)+' a day, you can spend up to '+fmt(C.shop)+' on outfits and personal care and keep Pay myself untouched.';
+    }
+    var hero=$('#fp-hero');hero.className='pnl m-hero fp-hero m-'+lv;
+    $('#fp-icon').textContent={good:'✓',warning:'!',critical:'✕'}[lv];
+    $('#fp-word').textContent=word;$('#fp-ans-k').textContent=k;
+    var a=$('#fp-ans');a.textContent=fmt(big);a.classList.toggle('neg',shopMode?C.shop<0:C.food<=0);
+    $('#fp-ans-d').textContent=per;$('#fp-lead').textContent=lead;
+    var row=function(t,v,cls){return '<div'+(cls?' class="'+cls+'"':'')+'><dt>'+esc(t)+'</dt><dd>'+v+'</dd></div>';},neg=function(v){return '−'+esc(fmt(v));};
+    $('#fp-sum').innerHTML=
+      row('Remaining (column G)',esc(fmtS(R.remaining)))+
+      (C.advIn?row('Advances already logged, paid from Pay myself','+'+esc(fmt(C.advIn))):'')+
+      row('Bills still to pay',neg(C.bills))+
+      row('InDrive ('+{low:'low',avg:'average',high:'high'}[I.ride]+')',neg(C.ride))+
+      row('Everything else',neg(C.other))+
+      (shopMode?row('Food, '+fmt(I.foodDay)+' a day × '+d,neg(C.food))+row('Left for shopping and personal care',esc(fmtS(C.shop)),'tot'+(C.shop<0?' neg':''))
+               :row('Shopping and personal care',neg(C.shop))+row('Left for food',esc(fmtS(C.food)),'tot'+(C.food<0?' neg':'')))+
+      row('Pay myself kept'+(C.adv?', after '+fmt(C.adv)+' in advances (back next payday)':''),esc(fmt(C.kept)));
+    $('#fp-bills-t').textContent=fmt(C.bills);
+    var sc=$('[data-cap="shop"]');
+    $('.fp-in',sc).hidden=shopMode;var calc=$('.fp-calc',sc);calc.hidden=!shopMode;calc.textContent=fmtS(C.shop);calc.classList.toggle('neg',C.shop<0);
+    $('.fp-food').hidden=!shopMode;
+    PEOPLE.forEach(function(p){
+      var a=I.adv[p.key]||{},fee=I.fees[p.key]!=null?I.fees[p.key]:p.fee,n=$('[data-next="'+p.key+'"]');
+      n.textContent=a.amt?'Next payday you pay '+fmt(Math.max(0,fee-a.amt))+' instead of '+fmt(fee)+', and '+fmt(Math.min(a.amt,fee))+' goes back to Pay myself.':'No advance this month.';
+    });
+  }
+
+  return {view:view,draw:draw,_model:model,_compute:compute,_inputs:inputs};
 })();

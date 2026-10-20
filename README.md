@@ -109,13 +109,14 @@ python3 -m http.server 8000
   - the daily limit, bills, a category treemap, change against the previous period, a 22-week activity heatmap, payment rails, InDrive rides and the largest transactions
 - **Flows** is a money-flow diagram from account to category to item, with money in and transfers between accounts.
 - **Explorer** is an object browser for transactions and items. It has facets (category, payment mode, amount, scope), sortable columns, and an inspector that shows each object's properties, linked item, history and a link to its row in the sheet.
-- **Forecast** answers one question for the current month: will this month's **Pay myself** stay untouched until the 20th of next month (the latest payday)?
-  - the money you have to spend: column G's Remaining (already after Pay myself) minus bills still due before payday
-  - the chance your usual spending fits in that, with a verdict (Likely untouched / Tight / At risk)
-  - how much to spend on **food** and how much buffer is left for **everything else**, in total and per day
-  - your daily limit against your usual daily spend, and how much would likely come out of Pay myself if you spend as usual
+- **Forecast** is a budget for the rest of the current payday cycle (today until the 20th of next month, the latest payday) that answers: can this month's **Pay myself** stay untouched?
+  - **Bills and subscriptions** (Claude, internet, Amazon, foodpanda, YouTube, and any you add): amounts are editable and start from what you last paid. Tick the ones still to pay.
+  - **Caps** for shopping and personal care, and for everything else (laundry, meds, repairs, fun). They start at your usual spending for this many days.
+  - **InDrive**: your low, average or high per-day rate from past months times the days left. Low and high are the averages of your cheaper and dearer months.
+  - **Advance payments** to Touheed or Mama: they come out of Pay myself, not this budget, and at the next payday you owe that much less, so it goes back to Pay myself. If you already logged an advance in the sheet, it is added back to the budget.
+  - Choose **Food budget** to see what is left for food, in total and per day, against your usual food spend. Choose **Shopping budget** to set food per day and see what is left for shopping.
 
-  How it works: everyday spending (food, getting around, personal) is a moving-block bootstrap of your own 7-day stretches, with recent weeks weighted more (60-day half-life) and stretches with nothing logged skipped. One-off buys of Rs 3,000 or more are a separate compound-Poisson process. 4,000 seeded simulations of the days until payday give the chance and the range. Touheed, Mama, renovation and transfers are not included.
+  What you enter is kept in your browser.
 - **Ctrl/Cmd + K** opens a command palette to jump to views, actions, items and transactions.
 
 ## Files
@@ -128,7 +129,7 @@ python3 -m http.server 8000
 | `viz.js` | Chart building blocks: scales, squarified treemap, flow layout, sparklines, sequential ramp |
 | `app.js` | Google sign-in, Sheets API calls, caching and change notifications |
 | `views.js` | Overview, Flows, Explorer, inspector and command palette |
-| `forecast.js` | This month’s Pay myself forecast (bootstrap + compound Poisson Monte Carlo) and the Forecast workspace |
+| `forecast.js` | Forecast workspace: this cycle's budget (bills, caps, InDrive, advances) and what is left for food or shopping |
 | `editor.js` | The Log entry form and the balances editor |
 | `config.js` | OAuth client ID and sheet ID |
 | `manifest.webmanifest`, `sw.js`, `icons/` | Installable web app: manifest, offline shell, icons |
