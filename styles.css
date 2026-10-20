@@ -757,3 +757,5 @@ body.gated .ctx,body.gated .tabs{display:none}
 .sv-t em{position:absolute;left:-4px;right:-4px;border-top:1.5px dashed var(--accent)}
 .sv-c span{font:10.5px var(--font-num);color:var(--muted)}
 .sw.sv-g{background:var(--good)}.sw.ln.sv-f{background:var(--accent)}
+.pf-ro{padding:10px 12px;border:1px dashed var(--line-2);border-radius:var(--r)}
+.pf-ro b{font:600 17px var(--font-num)}
