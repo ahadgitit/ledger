@@ -25,7 +25,7 @@
 
   // ---- UI state, kept per browser ----
   var LSU='ledger.ui';
-  var U={view:'overview',layers:{prev:true,pace:true,events:true},ex:{type:'tx',scope:'period',q:'',cats:[],modes:[],min:0,sort:'day',dir:-1,sel:null}};
+  var U={fx:false,view:'overview',layers:{prev:true,pace:true,events:true},ex:{type:'tx',scope:'period',q:'',cats:[],modes:[],min:0,sort:'day',dir:-1,sel:null}};
   try{var u=JSON.parse(localStorage.getItem(LSU)||'null');if(u){U.layers=Object.assign(U.layers,u.layers||{});if(u.ex){U.ex.type=u.ex.type||'tx';U.ex.scope=u.ex.scope||'period';}}}catch(e){}
   function saveU(){try{localStorage.setItem(LSU,JSON.stringify({layers:U.layers,ex:{type:U.ex.type,scope:U.ex.scope}}));}catch(e){}}
   function viewFromHash(){var m=/^#\/(overview|flows|explorer)/.exec(location.hash);return m?m[1]:'overview';}
@@ -77,6 +77,7 @@
     var el=$('#status-line');
     el.textContent=s.msg||'';
     el.className='status-line'+(s.warn?' warn':'');
+    $('.statusbar').classList.toggle('warn',!!s.warn);
     var live=L.state()==='ready'&&!s.warn&&S.tracking&&!S.stale;
     $('#sync').className='sync '+(S.busy?'busy':live?'live':S.tracking?'stale':'off');
     $('#sync-t').textContent=S.busy?'SYNCING':live?'LIVE':S.tracking?'CACHED':'OFFLINE';
@@ -108,7 +109,8 @@
     }
     if(st==='signedout') return '<div class="gate"><div class="gate-card"><div class="gate-mark">'+LOGO+'</div><h1>Ledger workspace</h1>'+
       '<p>Sign in with the Google account that owns your Monthly Expense Tracking sheet. Google will ask to let this page see and edit your spreadsheets, so you can log entries and update balances here.</p>'+
-      '<button type="button" class="btn primary" data-act="signin">Sign in with Google</button></div></div>';
+      '<button type="button" class="btn primary" data-act="signin">Sign in with Google</button>'+
+      (L.isApp()?'':'<a class="gate-apk" href="ledger.apk">Get the Android app ↓</a>')+'</div></div>';
     return '<div class="gate"><div class="gate-card loading"><div class="gate-mark">'+LOGO+'</div><h1>Opening workspace</h1><p>Reading your Tracking sheet…</p><div class="scan"></div></div></div>';
   }
   var LOGO='<svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path d="M4 18h16" class="lg-a"/><path d="M6 15l4-5 3 3 5-7" class="lg-b"/><circle cx="18" cy="6" r="1.8" class="lg-c"/></svg>';
@@ -326,8 +328,8 @@
     var el=$('#traj');
     if(!el) return;
     var A=M.A,B=M.B,cur=M.cur;
-    var W=Math.max(300,el.clientWidth),H1=210,H2=64,G=16;
-    var m={l:46,r:14,t:26,b:22};
+    var W=Math.max(280,el.clientWidth),narrow=W<560,H1=narrow?180:210,H2=narrow?52:64,G=16;
+    var m={l:narrow?38:46,r:narrow?8:14,t:26,b:22};
     var bal=M.isCycle?cur.bal:null;
     var n=A.daily.length,xEnd=n-1;
     var pace=null;
@@ -349,7 +351,7 @@
     function Y2(v){return y2b-v/dmax*H2;}
     var s='<svg viewBox="0 0 '+W+' '+(y2b+22)+'" width="'+W+'" height="'+(y2b+22)+'" role="img" aria-label="Cumulative and daily spending for '+esc(cur.name)+'">';
     // future region
-    if(xEnd>n-1) s+='<rect class="future" x="'+X(n-1)+'" y="'+m.t+'" width="'+(X(xEnd)-X(n-1))+'" height="'+(y2b-m.t)+'"/><text class="fut-t" x="'+(X(n-1)+6)+'" y="'+(m.t+ph-6)+'">REMAINING DAYS</text>';
+    if(xEnd>n-1) s+='<rect class="future" x="'+X(n-1)+'" y="'+m.t+'" width="'+(X(xEnd)-X(n-1))+'" height="'+(y2b-m.t)+'"/>'+(narrow?'':'<text class="fut-t" x="'+(X(n-1)+6)+'" y="'+(m.t+ph-6)+'">REMAINING DAYS</text>');
     [0,0.25,0.5,0.75,1].forEach(function(f){
       var yy=Y(ymax*f);
       s+='<line class="grid" x1="'+m.l+'" x2="'+(W-m.r)+'" y1="'+yy+'" y2="'+yy+'"/><text class="tick" x="'+(m.l-8)+'" y="'+(yy+3.5)+'" text-anchor="end">'+K(ymax*f)+'</text>';
@@ -371,7 +373,7 @@
       ev.sort(function(a,b){return a.day-b.day;}).forEach(function(t){
         var i=t.day-cur.start,x=X(i),y=Y(cum[i]);
         s+='<line class="ev" x1="'+x+'" x2="'+x+'" y1="'+m.t+'" y2="'+y+'"/><rect class="ev-d" x="'+(x-4)+'" y="'+(y-4)+'" width="8" height="8" transform="rotate(45 '+x+' '+y+')"/>';
-        if(x-lastX>80){s+='<text class="ev-t" x="'+(x+5)+'" y="'+(m.t-8)+'">'+esc(K(t.amt)+' '+t.name.slice(0,14))+'</text>';lastX=x;}
+        if(!narrow&&x-lastX>80){s+='<text class="ev-t" x="'+(x+5)+'" y="'+(m.t-8)+'">'+esc(K(t.amt)+' '+t.name.slice(0,14))+'</text>';lastX=x;}
       });
     }
     // daily bars
@@ -382,11 +384,11 @@
     var every=Math.max(1,Math.ceil((xEnd+1)/Math.max(2,Math.floor(pw/56))));
     var payLabel=!!(M.fb&&pace);
     for(var i=0;i<=xEnd;i+=every){
-      if(payLabel&&X(i)>W-m.r-104) break;
+      if(payLabel&&X(i)>W-m.r-(narrow?70:104)) break;
       var dn=cur.start+i,dd=new Date(dn*DAY);
       s+='<text class="tick" x="'+X(i)+'" y="'+(y2b+15)+'" text-anchor="middle">'+(i===0||dd.getUTCDate()===1?fmtDay(dn):dd.getUTCDate())+'</text>';
     }
-    if(payLabel) s+='<text class="pay-t" x="'+(W-m.r)+'" y="'+(y2b+15)+'" text-anchor="end">PAYDAY '+esc(fmtDay(M.fb.payday))+' →</text>';
+    if(payLabel) s+='<text class="pay-t" x="'+(W-m.r)+'" y="'+(y2b+15)+'" text-anchor="end">'+(narrow?'':'PAYDAY ')+esc(fmtDay(M.fb.payday))+' →</text>';
     if(cur.open) s+='<line class="today" x1="'+X(n-1)+'" x2="'+X(n-1)+'" y1="'+m.t+'" y2="'+y2b+'"/>';
     s+='<line class="xh" id="xh" x1="0" x2="0" y1="'+m.t+'" y2="'+y2b+'" visibility="hidden"/><circle class="xh-d" id="xh-d" r="4.5" visibility="hidden"/><circle class="xh-p" id="xh-p" r="3.5" visibility="hidden"/>';
     s+='<rect class="hit" id="traj-hit" x="'+m.l+'" y="'+m.t+'" width="'+pw+'" height="'+(y2b-m.t)+'"/></svg>';
@@ -513,7 +515,7 @@
     var topRows=list.slice(0,12).map(function(e,i){return '<tr data-item="'+esc(itemKey(e.name))+'" tabindex="0"><td class="id">'+String(i+1).padStart(2,'0')+'</td><td>'+esc(e.name)+'</td><td>'+tag(e.cat)+'</td><td class="n">'+e.n+'</td><td class="n">'+esc(fmt(e.v))+'</td></tr>';}).join('');
     return '<div class="grid">'+
       pnl('p-flow','Money flow',esc(fmt(M.A.spent))+' · account → category → item','<div id="sankey" class="sankey"></div><div class="legend sm">Width is money. Hover a band for its amount; click a category or item to open it in Explorer.</div>',{cls:'s12'})+
-      pnl('p-items','Top items',esc(M.cur.label),topRows?'<div class="tbl-w"><table class="tbl"><thead><tr><th>#</th><th>Item</th><th>Category</th><th class="n">Count</th><th class="n">Total</th></tr></thead><tbody>'+topRows+'</tbody></table></div>':'<div class="empty">Nothing yet.</div>',{cls:'s6'})+
+      pnl('p-items','Top items',esc(M.cur.label),topRows?'<div class="tbl-w"><table class="tbl"><thead><tr><th class="id">#</th><th>Item</th><th>Category</th><th class="n">Count</th><th class="n">Total</th></tr></thead><tbody>'+topRows+'</tbody></table></div>':'<div class="empty">Nothing yet.</div>',{cls:'s6'})+
       pnl('p-in','Money in',ins.length?'+'+esc(fmt(-ins.reduce(function(s,t){return s+t.amt;},0))):'',inRows?'<div class="tbl-w"><table class="tbl"><tbody>'+inRows+'</tbody></table></div>':'<div class="empty">Nothing received this '+M.unit+'.</div>',{cls:'s6'})+
       pnl('p-tr','Transfers between accounts',tr.length+' rows',trRows?'<div class="tbl-w"><table class="tbl"><tbody>'+trRows+'</tbody></table></div>':'<div class="empty">No transfers this '+M.unit+'.</div>',{cls:'s6'})+
       '</div>';
@@ -544,7 +546,7 @@
     var W=Math.max(320,el.clientWidth),narrow=W<640;
     var labW=narrow?78:150,H=Math.max(360,Math.min(560,C[2].length*40));
     var lay=Viz.sankey(C,links,W-labW*2,H,{nodeW:10,pad:narrow?6:10});
-    var s='<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" role="img" aria-label="Money flow from accounts to categories to items"><g transform="translate('+labW+',0)">';
+    var s='<svg viewBox="0 0 '+W+' '+(H+18)+'" width="'+W+'" height="'+(H+18)+'" role="img" aria-label="Money flow from accounts to categories to items"><g transform="translate('+labW+',0)">';
     lay.links.forEach(function(l,i){
       s+='<path class="lk '+l.cls+'" d="'+l.d+'" data-s="'+esc(l.s)+'" data-t="'+esc(l.t)+'" data-tip="'+esc(l.sn.label+' → '+l.tn.label+'\n'+fmt(l.v)+' · '+pct(l.v,M.A.spent)+'% of spent')+'"/>';
     });
@@ -615,7 +617,9 @@
     var modeVals=Object.keys(modeCount).sort(function(a,b){return modeCount[b]-modeCount[a];}).map(function(k){return {k:k,n:modeCount[k]};});
     var seg=function(name,opts,val){return '<div class="seg sm">'+opts.map(function(o){return '<button type="button" data-ex-'+name+'="'+o[0]+'" aria-pressed="'+(val===o[0])+'">'+o[1]+'</button>';}).join('')+'</div>';};
     var mins=[[0,'Any'],[500,'≥500'],[2000,'≥2k'],[10000,'≥10k']];
-    var side='<aside class="facets"><div class="ex-search"><input id="ex-q" type="search" placeholder="Search items, notes, TX-…" value="'+esc(U.ex.q)+'" autocomplete="off" aria-label="Search transactions"></div>'+
+    var nf=U.ex.cats.length+U.ex.modes.length+(U.ex.min?1:0);
+    var side='<aside class="facets'+(U.fx?' show':'')+'"><div class="ex-search"><input id="ex-q" type="search" placeholder="Search items, notes, TX-…" value="'+esc(U.ex.q)+'" autocomplete="off" aria-label="Search transactions">'+
+      '<button type="button" class="btn fx-toggle" data-fx aria-expanded="'+U.fx+'">Filters'+(nf?' <em>'+nf+'</em>':'')+'</button></div>'+
       '<div class="facet"><div class="facet-h">Object type</div>'+seg('type',[['tx','Transactions'],['item','Items']],U.ex.type)+'</div>'+
       '<div class="facet"><div class="facet-h">Scope</div>'+seg('scope',[['period',esc(M.cur.label)],['all','All time']],U.ex.scope)+'</div>'+
       facet('cat','Category',catVals,U.ex.cats,'data-ex-cat')+facet('mode','Payment mode',modeVals,U.ex.modes,'data-ex-mode')+
@@ -636,7 +640,7 @@
       items.sort(function(a,b){var x=a[sk],y=b[sk];if(sk==='name'){x=a.key;y=b.key;}return (x>y?1:x<y?-1:0)*U.ex.dir;});
       $('#ex-count').textContent=items.length+' objects · '+list.length+' transactions';
       var from=Math.max(0,M.periods.length-6);
-      el.innerHTML=items.length?'<div class="tbl-w"><table class="tbl ex-t"><thead><tr><th data-sort="name">Item'+sortIcon('name')+'</th><th>Category</th><th class="n" data-sort="n">Count'+sortIcon('n')+'</th><th class="n" data-sort="amt">Total'+sortIcon('amt')+'</th><th class="n">Avg</th><th data-sort="day">Last seen'+sortIcon('day')+'</th><th>Trend</th></tr></thead><tbody>'+
+      el.innerHTML=items.length?'<div class="tbl-w"><table class="tbl ex-t ex-it"><thead><tr><th data-sort="name">Item'+sortIcon('name')+'</th><th>Category</th><th class="n" data-sort="n">Count'+sortIcon('n')+'</th><th class="n" data-sort="amt">Total'+sortIcon('amt')+'</th><th class="n">Avg</th><th data-sort="day">Last seen'+sortIcon('day')+'</th><th>Trend</th></tr></thead><tbody>'+
         items.slice(0,400).map(function(e){
           var tr=M.periods.slice(from).map(function(p){return p.tx.reduce(function(s,t){return s+(itemKey(t.name)===e.key?Math.abs(t.amt):0);},0);});
           return '<tr data-item="'+esc(e.key)+'" tabindex="0"'+(U.ex.sel==='i:'+e.key?' class="sel"':'')+'><td>'+esc(e.name)+'</td><td>'+tag(e.cat)+'</td><td class="n">'+e.n+'</td><td class="n">'+esc(fmtS(e.v))+'</td><td class="n">'+esc(fmtS(e.v/e.n))+'</td><td>'+(e.last!=null?esc(fmtDay(e.last)):'–')+'</td><td class="sp">'+Viz.spark(tr,72,18,{area:false})+'</td></tr>';
@@ -649,7 +653,7 @@
         return (x>y?1:x<y?-1:0)*U.ex.dir;
       });
       $('#ex-count').textContent=list.length+' objects · '+fmt(total)+' spent';
-      el.innerHTML=list.length?'<div class="tbl-w"><table class="tbl ex-t"><thead><tr><th data-sort="n">ID'+sortIcon('n')+'</th><th data-sort="day">Date'+sortIcon('day')+'</th><th data-sort="name">Item'+sortIcon('name')+'</th><th>Category</th><th>Mode</th><th class="n" data-sort="amt">Amount'+sortIcon('amt')+'</th></tr></thead><tbody>'+
+      el.innerHTML=list.length?'<div class="tbl-w"><table class="tbl ex-t ex-tx"><thead><tr><th data-sort="n">ID'+sortIcon('n')+'</th><th data-sort="day">Date'+sortIcon('day')+'</th><th data-sort="name">Item'+sortIcon('name')+'</th><th>Category</th><th>Mode</th><th class="n" data-sort="amt">Amount'+sortIcon('amt')+'</th></tr></thead><tbody>'+
         list.slice(0,500).map(function(t){
           return '<tr data-tx="'+t.row+'" tabindex="0"'+(U.ex.sel==='t:'+t.row?' class="sel"':'')+'><td class="id">'+txId(t)+'</td><td class="d">'+(t.day!=null?esc(fmtDay(t.day)):'–')+'</td><td>'+esc(t.name)+'<small>'+esc(t.desc)+'</small></td><td>'+tag(catName(t.cat))+'</td><td>'+esc(t.mode)+'</td><td class="n'+(t.amt<0?' good':'')+'">'+(t.amt<0?'+':'')+esc(fmt(Math.abs(t.amt)))+'</td></tr>';
         }).join('')+'</tbody></table>'+(list.length>500?'<div class="empty">Showing the first 500. Narrow the filters to see the rest.</div>':'')+'</div>':'<div class="empty">Nothing matches these filters.</div>';
@@ -730,7 +734,8 @@
       {g:'Action',t:'Refresh',s:'Read the sheet again',run:function(){L.refresh(true);}},
       {g:'Action',t:'Open the Google Sheet',s:'In a new tab',run:function(){window.open(L.sheetUrl(),'_blank','noopener');}},
       {g:'Action',t:'Sign out',s:'Revoke access and clear the saved copy',run:function(){L.signOut();}}
-    ];
+    ].concat(L.isApp()?[]:[{g:'Action',t:'Get the Android app',s:'Download Ledger.apk',run:function(){location.href='ledger.apk';}}]).concat([
+    ]);
     acts.forEach(function(a){if(!q||(a.t+' '+a.s).toLowerCase().indexOf(q)>=0) out.push(a);});
     if(M&&!M.empty){
       Logic.CATS.concat(['Savings','Money in','Transfer']).forEach(function(c){
@@ -769,6 +774,7 @@
   function render(){
     renderShell();renderStatus();
     var v=$('#view');
+    document.body.classList.toggle('gated',!S.tracking);
     if(!S.tracking){v.className='view gate-v';v.innerHTML=gate();renderCtx();return;}
     M=model();
     renderCtx();
@@ -829,6 +835,7 @@
     if((b=t.closest('[data-ex-cat]'))){toggle(U.ex.cats,b.getAttribute('data-ex-cat'));render();return;}
     if((b=t.closest('[data-ex-mode]'))){toggle(U.ex.modes,b.getAttribute('data-ex-mode'));render();return;}
     if((b=t.closest('[data-ex-min]'))){U.ex.min=+b.getAttribute('data-ex-min');render();return;}
+    if(t.closest('[data-fx]')){U.fx=!U.fx;render();return;}
     if(t.closest('[data-ex-reset]')){U.ex.cats=[];U.ex.modes=[];U.ex.min=0;U.ex.q='';render();return;}
     if((b=t.closest('th[data-sort]'))){var sk=b.getAttribute('data-sort');if(U.ex.sort===sk) U.ex.dir=-U.ex.dir;else{U.ex.sort=sk;U.ex.dir=sk==='name'?1:-1;}exTable();return;}
   });

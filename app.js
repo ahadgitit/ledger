@@ -25,7 +25,18 @@
   // authState: 'unconfigured' (no client or sheet id), 'loading' (Google script not ready), 'signedout', 'ready'
   var authState=(CLIENT_ID&&SHEET_ID)?'loading':'unconfigured';
   var tokenClient=null,token=null,pendingAuth=null,busy=false,again=false,retried=false,ctrl=null;
-  var listeners=[];
+  var listeners=[],pendingMsg='',started=false;
+
+  // Running as the installed Android app (Trusted Web Activity) or a home-screen app.
+  // Google refuses its sign-in popup inside app views, so these use a full-page redirect.
+  var IS_APP=(function(){
+    try{
+      if(/[?&]source=(twa|pwa)\b/.test(location.search)||document.referrer.indexOf('android-app://')===0) sessionStorage.setItem('ledger.app','1');
+      return sessionStorage.getItem('ledger.app')==='1';
+    }catch(e){return /[?&]source=(twa|pwa)\b/.test(location.search);}
+  })();
+  function standalone(){try{return matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;}catch(e){return false;}}
+  var REDIRECT=location.origin+location.pathname;
 
   try{
     var t=JSON.parse(sessionStorage.getItem(SS_TOK)||'null');
@@ -74,7 +85,29 @@
     try{sessionStorage.removeItem(SS_TOK);}catch(e){}
     if(authState==='ready'){authState='signedout';notify('auth');}
   }
+  function signInRedirect(){
+    var st=Math.random().toString(36).slice(2)+Date.now().toString(36);
+    try{sessionStorage.setItem('ledger.oauth',st);}catch(e){}
+    var q=[['client_id',CLIENT_ID],['redirect_uri',REDIRECT],['response_type','token'],['scope',SCOPE],['include_granted_scopes','true'],['state',st]];
+    location.href='https://accounts.google.com/o/oauth2/v2/auth?'+q.map(function(p){return p[0]+'='+encodeURIComponent(p[1]);}).join('&');
+    return new Promise(function(){});
+  }
+  // Pick up the token Google appends to the page address after a redirect sign-in.
+  function takeRedirect(){
+    var h=location.hash;
+    if(!/[#&](access_token|error)=/.test(h)) return;
+    var q={};
+    h.slice(1).split('&').forEach(function(kv){var i=kv.indexOf('=');if(i>0) q[decodeURIComponent(kv.slice(0,i))]=decodeURIComponent(kv.slice(i+1).replace(/\+/g,' '));});
+    var want=null;
+    try{want=sessionStorage.getItem('ledger.oauth');sessionStorage.removeItem('ledger.oauth');}catch(e){}
+    history.replaceState(null,'',location.pathname+location.search+'#/overview');
+    if(!want||q.state!==want){pendingMsg='The Google sign-in reply did not match this session. Press Sign in again.';return;}
+    if(q.error){pendingMsg=q.error==='access_denied'?'Google sign-in was cancelled.':'Google sign-in failed ('+q.error+'). If it says redirect_uri_mismatch, add '+REDIRECT+' as an authorized redirect URI of the OAuth client.';return;}
+    if(q.scope&&q.scope.split(' ').indexOf(SCOPE)<0){pendingMsg='Allow Ledger to see and edit your spreadsheets to continue.';return;}
+    if(q.access_token) setToken({access_token:q.access_token,expires_in:q.expires_in});
+  }
   function signIn(){
+    if(IS_APP||standalone()) return signInRedirect();
     if(!tokenClient) return Promise.resolve();
     return new Promise(function(res,rej){
       pendingAuth={res:res,rej:rej};
@@ -98,8 +131,8 @@
     });
     authState=token?'ready':'signedout';
     notify('auth');
-    if(authState==='ready') load(false);
-    else setStatus(S.tracking?'Showing a saved copy from '+timeStr(S.at)+'. Sign in to update it.':'Sign in with the Google account that owns your expense sheet.',false);
+    if(authState==='ready'&&!started) load(false);
+    else if(!pendingMsg) setStatus(S.tracking?'Showing a saved copy from '+timeStr(S.at)+'. Sign in to update it.':'Sign in with the Google account that owns your expense sheet.',false);
   }
   function loadGoogle(){
     var s=document.createElement('script');
@@ -194,6 +227,7 @@
 
   window.Ledger={
     S:S,esc:esc,fmt:fmt,fmtS:fmtS,timeStr:timeStr,errMsg:errMsg,
+    isApp:function(){return IS_APP||standalone();},
     config:function(){return {clientId:CLIENT_ID,sheetId:SHEET_ID,range:TRACK_RANGE};},
     sheetUrl:function(){return 'https://docs.google.com/spreadsheets/d/'+encodeURIComponent(SHEET_ID)+'/edit';},
     state:function(){return authState;},
@@ -215,13 +249,16 @@
   document.addEventListener('visibilitychange',function(){if(!document.hidden&&authState==='ready'&&Date.now()-S.at>60000) load(false);});
 
   restore();
+  takeRedirect();
   // views.js and editor.js load after this file; start once the page is parsed.
   document.addEventListener('DOMContentLoaded',function(){
     notify('auth');notify('data');
-    if(authState==='unconfigured') setStatus('Add your Google OAuth client ID to finish setting up.',true);
-    else{
-      if(S.tracking) setStatus('Showing a saved copy from '+timeStr(S.at)+'. Connecting to Google…',false);
-      loadGoogle();
-    }
+    if('serviceWorker' in navigator&&location.protocol==='https:') navigator.serviceWorker.register('sw.js').catch(function(){});
+    if(authState==='unconfigured'){setStatus('Add your Google OAuth client ID to finish setting up.',true);return;}
+    if(pendingMsg) setStatus(pendingMsg,true);
+    else if(S.tracking) setStatus('Showing a saved copy from '+timeStr(S.at)+'. Connecting to Google\u2026',false);
+    // A token from a redirect sign-in is usable straight away.
+    if(authState==='ready'){started=true;load(false);}
+    loadGoogle();
   });
 })();

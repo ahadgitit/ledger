@@ -39,6 +39,19 @@ Pages at **https://ahadgitit.github.io/ledger/**.
   under those labels in the month's column G block. Only those cells change, so Total and
   Remaining keep their formulas. **Undo** puts back exactly what was there, formulas included.
 
+## Android app
+
+Every push builds a signed Android app on GitHub Actions and publishes it next to the site:
+**https://ahadgitit.github.io/ledger/ledger.apk**. You can also find it in the command palette ("Get the Android app") and on the sign-in screen.
+
+- It is a Trusted Web Activity: it opens the hosted workspace in Chrome's engine. Google sign-in, storage and updates therefore behave as on the website, and changes to the site show up in the app without reinstalling.
+- Inside the app, sign-in goes to Google's page and comes back, because Google does not allow its sign-in popup in app views. **One-time setup:** add `https://ahadgitit.github.io/ledger/` under **Authorized redirect URIs** of the OAuth client in Google Cloud.
+- To install it, open the APK on the phone and allow "Install unknown apps" for your browser when Android asks. The app is not on the Play Store.
+- The app shows a small address bar at the top until Android can verify the site. Verification needs `https://ahadgitit.github.io/.well-known/assetlinks.json`, which lives at the root of the domain, so it requires a separate `ahadgitit.github.io` repository with that file. The key's SHA-256 fingerprint is
+  `8F:E7:B1:59:51:D9:9D:02:66:01:AF:D6:CE:94:E4:53:72:0E:9F:E9:28:93:22:36:28:06:2D:AD:44:66:AF:26`.
+- The signing key is `android/ledger.keystore` and is committed for convenience. To use a private key, set the `LEDGER_KEYSTORE_*` environment variables in the workflow from repository secrets.
+- The site is also an installable web app: in Chrome, use "Add to Home screen".
+
 ## One-time setup
 
 ### 1. Turn on GitHub Pages
@@ -110,6 +123,8 @@ python3 -m http.server 8000
 | `views.js` | Overview, Flows, Explorer, inspector and command palette |
 | `editor.js` | The Log entry form and the balances editor |
 | `config.js` | OAuth client ID and sheet ID |
+| `manifest.webmanifest`, `sw.js`, `icons/` | Installable web app: manifest, offline shell, icons |
+| `android/` | Android app project (Trusted Web Activity), built by the workflow |
 | `.github/workflows/pages.yml` | Deploys to GitHub Pages |
 
 Settings that live in `logic.js`: payday on the 20th (`PAYDAY_DOM`), a 10% buffer
