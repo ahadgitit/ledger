@@ -487,8 +487,9 @@
       var tmax=Math.max.apply(null,names.map(function(k){return Math.abs(b.acc[k]);}).concat([1]));
       var tiles=names.map(function(k){
         var v=b.acc[k];
-        return '<div class="acc-tile"><span class="acc-n">'+esc(k)+'</span><span class="acc-v'+(v<0?' neg':'')+'">'+esc(fmtS(v))+'</span>'+
-          '<span class="acc-bar"><i style="width:'+(v>0?Math.max(2,v/tmax*100):0)+'%"></i></span></div>';
+        return '<button type="button" class="acc-tile" data-open-bal="'+esc(src.name)+'" data-acct="'+esc(k)+'" aria-label="Edit '+esc(k)+' balance, now '+esc(fmtS(v))+'">'+
+          '<span class="acc-n">'+esc(k)+'<span class="acc-edit" aria-hidden="true">Edit</span></span><span class="acc-v'+(v<0?' neg':'')+'">'+esc(fmtS(v))+'</span>'+
+          '<span class="acc-bar"><i style="width:'+(v>0?Math.max(2,v/tmax*100):0)+'%"></i></span></button>';
       }).join('');
       var status,why='';
       if(off==null) status='<span class="sync-pill">No offset row</span>';
@@ -505,7 +506,7 @@
           '<div><dt>Your entries say</dt><dd>'+esc(fmtS(expect))+'</dd></div>'+
           '<div class="diff'+(ok?' ok':' bad')+'"><dt>Difference</dt><dd>'+(ok?'Rs\u00a00':esc((off>0?'+':'\u2212')+fmtS(Math.abs(off))))+'</dd></div></dl>':'')+
         (why?'<p class="recon-why">'+esc(why)+'</p>':'')+
-        '<div class="acct-foot"><span class="hint">'+esc(src.name)+' \u00b7 balances from column G of your Tracking tab</span>'+
+        '<div class="acct-foot"><span class="hint">'+esc(src.name)+' \u00b7 tap an account to correct it. Balances live in column G of your Tracking tab.</span>'+
         '<button type="button" class="btn" data-open-bal="'+esc(src.name)+'">Update balances</button></div></section>';
     })();
     var alertHTML='';

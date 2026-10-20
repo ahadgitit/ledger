@@ -416,7 +416,7 @@
     if(!t) return;
     if(t.id==='add'||t.id==='fab') return openAdd();
     if(t.id==='bal') return openBal();
-    if(t.hasAttribute('data-open-bal')) return openBal(t.getAttribute('data-open-bal'));
+    if(t.hasAttribute('data-open-bal')) return openBal(t.getAttribute('data-open-bal'),t.getAttribute('data-acct'));
     if(t.matches('[data-close]')){t.closest('dialog').close();return;}
     var inAdd=t.closest('#add-dlg'),inBal=t.closest('#bal-dlg');
     if(inAdd){

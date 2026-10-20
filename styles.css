@@ -322,7 +322,11 @@ input[type=date].inline{flex:0 1 auto;font-family:var(--font-num)}
 .sync-pill.bad{background:var(--bad-bg);color:var(--bad);border-color:color-mix(in srgb,var(--bad) 35%,transparent)}
 .sync-pill.bad b{background:var(--bad)}
 .acc-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
-.acc-tile{display:grid;gap:4px;padding:12px 14px;border-radius:12px;background:var(--plane);border:1px solid var(--grid);min-width:0}
+.acc-tile{display:grid;gap:4px;padding:12px 14px;border-radius:12px;background:var(--plane);border:1px solid var(--grid);min-width:0;font:inherit;color:inherit;text-align:left;cursor:pointer;transition:border-color .15s,box-shadow .15s,transform .1s}
+.acc-tile:hover{border-color:var(--s1)}
+.acc-tile:active{transform:scale(.99)}
+.acc-n{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.acc-edit{font-size:11px;font-weight:600;color:var(--s1);padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--s1) 12%,transparent)}
 .acc-n{font-size:12px;color:var(--ink-2)}
 .acc-v{font:600 20px var(--font-num);letter-spacing:-.01em;overflow-wrap:anywhere}
 .acc-v.neg{color:var(--bad)}
