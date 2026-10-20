@@ -71,6 +71,7 @@
     if(c==='popup_failed') return 'The Google sign-in window could not open. Allow pop-ups for this site, then press Sign in.';
     if(c==='auth'||c==='unauthorized') return 'Your Google sign-in has expired or was refused. Press Sign in.';
     if(c==='forbidden') return 'Google refused access to the sheet. Sign out, then sign in again with the Google account that owns the Monthly Expense Tracking sheet and allow it to see and edit your spreadsheets.';
+    if(c==='plan_write') return 'Google refused to save the plan: '+(e.message||'unknown reason')+'.';
     if(c==='not_found') return 'The sheet or its Tracking tab was not found. Check the sheet ID in config.js and that the tab is still named Tracking.';
     if(c==='rate_limited'||c==='upstream_error'||c==='network') return 'Google Sheets did not answer. '+(S.tracking?'Showing the last saved copy. ':'')+'Press Refresh to try again.';
     return 'The sheet could not be loaded ('+(c||(e&&e.message)||'unknown error')+'). Press Refresh to try again.';
@@ -250,12 +251,17 @@
     refresh:function(manual){retried=false;return load(!!manual);},
     // Replace the Plan tab's contents (creating the tab the first time).
     savePlan:function(rows){
-      var first=S.planMissing?api(':batchUpdate',{method:'POST',body:{requests:[{addSheet:{properties:{title:'Plan',gridProperties:{rowCount:300,columnCount:6}}}}]}})
-        .catch(function(e){if(!/already exists/i.test(e&&e.message||'')) throw e;}):Promise.resolve();
       var range='Plan!A1:D'+rows.length;
-      return first.then(function(){S.planMissing=false;return api('/values/'+encodeURIComponent(PLAN_RANGE)+':clear',{method:'POST',body:{}});})
+      // Ask Google which tabs exist right now instead of trusting a cached flag.
+      return api('?fields=sheets.properties.title').then(function(meta){
+        var has=(meta.sheets||[]).some(function(x){return x.properties&&x.properties.title==='Plan';});
+        if(has) return;
+        return api(':batchUpdate',{method:'POST',body:{requests:[{addSheet:{properties:{title:'Plan',gridProperties:{rowCount:300,columnCount:6}}}}]}})
+          .catch(function(e){if(!/already exists/i.test(e&&e.message||'')) throw e;});
+      }).then(function(){S.planMissing=false;return api('/values/'+encodeURIComponent(PLAN_RANGE)+':clear',{method:'POST',body:{}});})
         .then(function(){return api('/values/'+encodeURIComponent(range)+'?valueInputOption=RAW',{method:'PUT',body:{range:range,majorDimension:'ROWS',values:rows}});})
-        .then(function(){S.planRows=rows.map(function(r){return r.map(function(x){return x==null?'':String(x);});});save();notify('data');});
+        .then(function(){S.planRows=rows.map(function(r){return r.map(function(x){return x==null?'':String(x);});});save();notify('data');})
+        .catch(function(e){if(e&&e.code==='not_found'){e.code='plan_write';} throw e;});
     },
     on:function(f){listeners.push(f);}
   };
