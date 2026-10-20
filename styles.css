@@ -275,6 +275,8 @@ line.axis{stroke:var(--axis);stroke-width:1}
 .bills li:first-child{border-top:0}
 .bl-w{font:11px var(--font-num);color:var(--muted);text-align:right}
 .bl-v{font:500 12px var(--font-num);text-align:right}
+.bl-in{width:100%;max-width:96px;text-align:right;font-family:var(--font-num)!important;padding:4px 7px!important}
+.bills li{grid-template-columns:minmax(0,1fr) auto 58px 96px}
 
 /* treemap */
 .tree{min-height:220px}

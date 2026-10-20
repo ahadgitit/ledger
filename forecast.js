@@ -200,13 +200,12 @@ var Forecast=(function(){
     return '<div class="plan" id="fp">'+
       '<section class="pnl m-hero fp-hero" id="fp-hero"><div class="pnl-b">'+
         '<div class="fp-top"><div class="m-q">Can your Pay myself of <b>'+esc(fmt(R.saved))+'</b> stay untouched until '+esc(until)+'?</div>'+
-          '<div class="fp-mode"><span class="lbl">Predict</span><div class="seg" role="group" aria-label="What to predict"><button type="button" data-mode="food" aria-pressed="'+foodMode+'">Food</button><button type="button" data-mode="shop" aria-pressed="'+!foodMode+'">Shopping</button></div></div></div>'+
+          '<div class="fp-mode"><span class="lbl">Predict</span><div class="seg" role="group" aria-label="What to predict"><button type="button" data-pmode="food" aria-pressed="'+foodMode+'">Food</button><button type="button" data-pmode="shop" aria-pressed="'+!foodMode+'">Shopping</button></div></div></div>'+
         '<div class="m-v"><span class="m-pill"><b id="fp-icon"></b><span id="fp-word"></span></span></div>'+
         '<div class="m-k" id="fp-ans-k"></div><div class="m-big" id="fp-ans"></div><div class="m-day" id="fp-ans-d"></div>'+
         '<p class="m-lead" id="fp-lead"></p>'+
         '<dl class="ledger fp-sum" id="fp-sum"></dl>'+
       '</div></section>'+
-      outlookView()+
       '<div class="fp-grid">'+
       ui.pnl('fp-food','Food','what you spent each month',
         (foodMode?result('food'):capBox('food',usualFood))+foodChart()+
@@ -229,6 +228,7 @@ var Forecast=(function(){
         '<p>Predict food: your shopping cap is taken off too, and what is left is for food. Predict shopping: your food cap is taken off, and what is left is for shopping.</p>'+
         '<p>An advance to Touheed or Mama is paid out of Pay myself, so it lowers what you keep this month but not this budget, and at the next payday you owe that much less. If you already logged it in the sheet, Remaining went down by it, so it is added back here.</p>'+
         '<p>What you enter here is kept in this browser.</p></details>'+
+      outlookView()+
     '</div>';
   }
 
@@ -292,7 +292,7 @@ var Forecast=(function(){
     });
     root.addEventListener('click',function(e){
       var t=e.target.closest('button');if(!t) return;
-      if(t.dataset.mode){if(s.mode!==t.dataset.mode){s.mode=t.dataset.mode;save();rerender();}}
+      if(t.dataset.pmode){if(s.mode!==t.dataset.pmode){s.mode=t.dataset.pmode;save();rerender();}}
       else if(t.dataset.ride){s.ride=t.dataset.ride;save();$$('[data-ride]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});update();}
       else if(t.dataset.use){
         var box=t.closest('[data-cap]'),inp=$('input',box),u=+t.dataset.use;
@@ -540,5 +540,9 @@ var Forecast=(function(){
       rows.map(function(r,i){return '<tr><td>'+esc(r.m.name+' '+r.m.year)+'</td><td class="n">'+esc(fmt(r.salary))+'</td><td class="n">'+esc(fmt(r.mama+r.touheed))+'</td><td class="n">'+esc(fmt(r.bills))+'</td><td class="n">'+esc(fmt(r100(r.spend)))+'</td><td class="n">'+(r.planned?esc(fmt(r.planned)):'–')+'</td><td class="n">'+esc(fmtS(r100(r.saveP50)))+'</td><td class="n">'+esc(fmt(r100(B[i].p50)))+'</td></tr>';}).join('')+'</tbody>';
   }
 
-  return {view:view,draw:draw,_model:model,_compute:compute,_inputs:inputs};
+  // a bill's estimate for a cycle, shared with the Overview
+  function billAmt(cycleStart,key){var o=(load().bills[String(cycleStart)]||{})[key];return o&&o.amt!=null?o.amt:null;}
+  function setBillAmt(cycleStart,key,v){var s=load(),b=s.bills[String(cycleStart)]=s.bills[String(cycleStart)]||{};b[key]=b[key]||{};b[key].amt=v;save();}
+
+  return {billAmt:billAmt,setBillAmt:setBillAmt,view:view,draw:draw,_model:model,_compute:compute,_inputs:inputs};
 })();

@@ -52,6 +52,11 @@
     if(!isCycle) for(var j=cyc.length-1;j>=0;j--) if(cyc[j].bal){balSrc=cyc[j];break;}
     var bal=balSrc&&balSrc.bal&&balSrc.bal.acc&&Object.keys(balSrc.bal.acc).length?balSrc.bal:null;
     var sub=Logic.subscriptions(periods,i);
+    // amounts still due use your own estimate when you have set one (shared with the Forecast tab)
+    if(isCycle&&cur.open&&window.Forecast&&Forecast.billAmt){
+      sub.due=0;
+      sub.rows.forEach(function(r){if(r.status!=='due') return;var o=Forecast.billAmt(cur.start,r.key);if(o!=null) r.amount=o;sub.due+=r.amount;});
+    }
     var fb=isCycle?Logic.foodBudget(cur,cur.bal,sub,today):null;
     var rides=Logic.rides(periods);
     return {parsed:parsed,all:parsed.all,periods:periods,i:i,cur:cur,prev:prev,aggs:aggs,A:A,B:B,isCycle:isCycle,unit:isCycle?'cycle':'month',
@@ -138,7 +143,6 @@
       if(Math.abs(off)>=1) out.push({lv:'serious',t:'Accounts off by '+fmt(Math.abs(off)),d:off>0?'Accounts hold more than the entries explain. A balance was probably not lowered after logging.':'Accounts hold less than the entries say. An expense is probably missing.',act:'<button type="button" class="lnk" data-open-bal="'+esc(M.balSrc.name)+'">Reconcile →</button>'});
       else out.push({lv:'good',t:'Accounts reconciled',d:'ABL, Sadapay and Cash match the logged entries for '+M.balSrc.name+'.'});
     }
-    if(M.fb&&M.fb.avail<=0) out.push({lv:'critical',t:'Nothing safe to spend before payday',d:'Bills still due ('+fmt(M.fb.due)+') use up what remains.'});
     var due=M.sub.rows.filter(function(r){return r.status==='due';});
     if(due.length) out.push({lv:'warning',t:due.length+(due.length===1?' bill':' bills')+' still due · '+fmt(M.sub.due),d:due.map(function(r){return r.label;}).join(', ')+'.'});
     var missed=M.sub.rows.filter(function(r){return r.status==='missed';});
@@ -169,7 +173,6 @@
     var cum=0,cumVals=A.daily.map(function(x){cum+=x.v;return cum;});
     var k=[];
     k.push(kpi('Spent · '+cur.label,esc(fmt(A.spent)),delta,{cls:'hero',spark:Viz.spark(cumVals,120,30)}));
-    if(M.fb) k.push(kpi('Safe to spend',esc(fmt(Math.max(0,Math.floor(M.fb.perDay))))+'<small>/day</small>',esc(M.fb.days+' days to payday · '+fmtDay(M.fb.payday)),{cls:M.fb.avail<=0?'bad':''}));
     var bal=M.isCycle?cur.bal:null;
     if(bal) k.push(kpi('Remaining',esc(fmtS(bal.remaining)),'Column G of '+esc(cur.name),{cls:bal.remaining<0?'bad':''}));
     if(M.bal){
@@ -197,7 +200,7 @@
       '<div class="grid">'+
       pnl('p-traj','Spend trajectory',esc(rangeText(cur)),'<div class="traj" id="traj"></div><div class="legend" id="traj-legend"></div>',{cls:'s8',tools:tools})+
       pnl('p-sig','Signals','<span class="count">'+sig.length+'</span>',sigHTML,{cls:'s4'})+
-      accountsPanel()+budgetPanel()+billsPanel()+
+      accountsPanel()+billsPanel()+
       compositionPanel()+deltaPanel()+
       pnl('p-heat','Activity','Daily spend, last 22 weeks','<div id="heat"></div>',{cls:'s8'})+
       railsPanel()+
@@ -221,45 +224,45 @@
     var pill=off==null?'':ok?'<span class="pill good"><b>✓</b>In sync</span>':'<span class="pill critical"><b>!</b>Off '+esc(fmt(Math.abs(off)))+'</span>';
     var recon=off==null?'':'<div class="recon'+(ok?'':' off')+'"><div><span>Accounts</span><b>'+esc(fmtS(total))+'</b></div><div class="eq">'+(ok?'=':'≠')+'</div><div><span>Entries say</span><b>'+esc(fmtS(total-off))+'</b></div>'+
       '<div class="diff"><span>Offset</span><b>'+(ok?'0':esc((off>0?'+':'−')+K(Math.abs(off))))+'</b></div></div>';
-    return pnl('p-acct','Accounts',pill,'<div class="accs">'+tiles+'</div>'+recon+'<div class="pnl-foot"><span>'+esc(M.balSrc.name)+' · tap an account to correct it</span><button type="button" class="lnk" data-open-bal="'+esc(M.balSrc.name)+'">Update balances →</button></div>',{cls:'s4'});
+    return pnl('p-acct','Accounts',pill,'<div class="accs">'+tiles+'</div>'+recon+'<div class="pnl-foot"><span>'+esc(M.balSrc.name)+' · tap an account to correct it</span><button type="button" class="lnk" data-open-bal="'+esc(M.balSrc.name)+'">Update balances →</button></div>',{cls:'s6'});
   }
 
-  function budgetPanel(){
-    var fb=M.fb;
-    if(!fb){
-      var body='<div class="empty">'+(M.isCycle?(M.cur.open?'Needs the Remaining row in column G.':'Only shown for the current payday cycle.'):'Switch to payday cycles to see the daily limit.')+'</div>';
-      return pnl('p-bud','Daily limit','',body,{cls:'s4'});
-    }
-    var pctB=Math.round(Logic.BUFFER*100);
-    var seg='';
-    if(fb.remaining>0&&fb.avail>0){
-      var dp=fb.due/fb.remaining*100,bp=fb.buffer/fb.remaining*100,up=fb.usable/fb.remaining*100;
-      seg='<div class="segbar">'+(up>0?'<i class="u" style="width:'+up+'%" data-tip="'+esc('Spend limit\n'+fmt(fb.usable))+'"></i>':'')+(dp>0?'<i class="d" style="width:'+dp+'%" data-tip="'+esc('Bills still due\n'+fmt(fb.due))+'"></i>':'')+(bp>0?'<i class="b" style="width:'+bp+'%" data-tip="'+esc(pctB+'% buffer\n'+fmt(fb.buffer))+'"></i>':'')+'</div>'+
-        '<div class="legend sm"><span><i class="sw u"></i>Spendable</span><span><i class="sw d"></i>Bills due</span><span><i class="sw b"></i>'+pctB+'% buffer</span></div>';
-    }
-    var big=fb.avail<=0?'Rs 0':fmt(Math.floor(fb.perDay));
-    var food=M.A.dayCount>=3&&M.A.by['Food']>0?'<div class="mini">Food so far: '+esc(fmt(M.A.by['Food']/M.A.dayCount))+'/day</div>':'';
-    var led='<dl class="ledger">'+
-      '<div><dt>Remaining</dt><dd>'+esc(fmtS(fb.remaining))+'</dd></div>'+
-      '<div><dt>Bills due before payday</dt><dd>−'+esc(fmt(fb.due))+'</dd></div>'+
-      '<div><dt>'+pctB+'% buffer</dt><dd>−'+esc(fmt(fb.buffer))+'</dd></div>'+
-      '<div class="tot"><dt>Safe until payday</dt><dd>'+esc(fmt(fb.usable))+'</dd></div></dl>';
-    return pnl('p-bud','Daily limit',esc(fb.days+' days · payday '+fmtDay(fb.payday)),
-      '<div class="bud"><div class="bud-v'+(fb.avail<=0?' bad':'')+'">'+esc(big)+'<small>/day</small></div>'+food+'</div>'+seg+led,{cls:'s4'});
+  // the rows in this period a paid bill came from; only a single row can be edited in place
+  function billTx(key){
+    return M.cur.tx.filter(function(t){return t.amt>0&&t.row&&Logic.subKey(t)===key;});
   }
-
   function billsPanel(){
     var sub=M.sub;
-    if(!sub.rows.length) return pnl('p-bills','Bills & subscriptions','','<div class="empty">No recurring bills found yet.</div>',{cls:'s4'});
+    if(!sub.rows.length) return pnl('p-bills','Bills & subscriptions','','<div class="empty">No recurring bills found yet.</div>',{cls:'s6'});
     var rows=sub.rows.map(function(r){
       var st=r.status==='paid'?'<span class="st good"><b>✓</b>Paid</span>':r.status==='due'?'<span class="st warning"><b>!</b>Due</span>':'<span class="st info"><b>i</b>Missing</span>';
       var when=r.status==='paid'?(r.when!=null?fmtDay(r.when):''):r.when!=null?'≈'+fmtDay(r.when):'';
-      return '<li><span class="bl-n">'+esc(r.label)+'</span>'+st+'<span class="bl-w">'+esc(when)+'</span><span class="bl-v">'+(r.status==='missed'?'–':esc(fmt(r.amount)))+'</span></li>';
+      var edit=r.status==='due'||(r.status==='paid'&&billTx(r.key).length===1);
+      var val=r.status==='missed'?'–':edit?'<input class="inline bl-in" inputmode="numeric" enterkeyhint="done" autocomplete="off" data-bill-edit="'+esc(r.key)+'" data-was="'+Math.round(r.amount)+'" value="'+esc(Math.round(r.amount).toLocaleString('en-US'))+'" aria-label="'+esc(r.label)+' amount">':esc(fmt(r.amount));
+      return '<li><span class="bl-n">'+esc(r.label)+'</span>'+st+'<span class="bl-w">'+esc(when)+'</span><span class="bl-v">'+val+'</span></li>';
     }).join('');
     var total=sub.paid+sub.due;
     return pnl('p-bills','Bills & subscriptions',esc(fmt(sub.paid))+' paid'+(sub.due>0?' · '+esc(fmt(sub.due))+' due':''),
-      (total>0?'<div class="segbar thin"><i class="u" style="width:'+(sub.paid/total*100)+'%"></i><i class="d" style="width:'+(sub.due/total*100)+'%"></i></div>':'')+'<ul class="bills">'+rows+'</ul>',{cls:'s4'});
+      (total>0?'<div class="segbar thin"><i class="u" style="width:'+(sub.paid/total*100)+'%"></i><i class="d" style="width:'+(sub.due/total*100)+'%"></i></div>':'')+'<ul class="bills">'+rows+'</ul>'+
+      '<div class="pnl-foot"><span>Edit an amount: paid ones change the sheet, due ones are your estimate</span></div>',{cls:'s6'});
   }
+  // a changed bill amount: a paid one is rewritten in its sheet row, a due one is kept as your estimate
+  document.addEventListener('change',function(e){
+    var t=e.target;
+    if(!t.matches||!t.matches('[data-bill-edit]')) return;
+    var key=t.getAttribute('data-bill-edit'),was=+t.getAttribute('data-was'),n=Logic.num(t.value);
+    if(n==null||!isFinite(n)||n<0){t.value=was.toLocaleString('en-US');return;}
+    n=Math.round(n);t.value=n.toLocaleString('en-US');
+    if(n===was) return;
+    var r=M.sub.rows.find(function(x){return x.key===key;}),E=window.LedgerEditor;
+    if(r.status==='due'){Forecast.setBillAmt(M.cur.start,key,n);if(E) E.toast(r.label+' estimate set to '+fmt(n)+'.');render();return;}
+    var tx=billTx(key);if(tx.length!==1) return;
+    var row=tx[0].row,range='Tracking!B'+row;
+    (L.hasToken()?Promise.resolve():L.signIn()).then(function(){return L.put(range,[[n]]);}).then(function(){
+      L.refresh();
+      if(E) E.toast('Changed '+r.label+' to '+fmt(n)+' in row '+row+'.',[{label:'Undo',run:function(){L.put(range,[[was]]).then(function(){L.refresh();E.toast('Put back.');}).catch(function(x){E.toast(L.errMsg(x));});}}]);
+    }).catch(function(x){t.value=was.toLocaleString('en-US');if(E) E.toast(L.errMsg(x));});
+  });
 
   function catTotals(X){
     var out=Logic.CATS.map(function(c){return {name:c,v:X.by[c]};});
@@ -288,9 +291,10 @@
     return pnl('p-delta','Change vs '+M.prev.label,M.cur.open?'so far':'',
       '<ul class="dlist">'+list+'</ul><div class="legend sm"><span><i class="sw neg"></i>Spent less</span><span><i class="sw pos"></i>Spent more</span></div>',{cls:'s5'});
   }
+  var RAILS=['ABL','Sadapay','Cash'];
   function railsPanel(){
     var A=M.A;
-    var keys=Object.keys(A.mode).filter(function(k){return A.mode[k]>0;}).sort(function(a,b){return A.mode[b]-A.mode[a];});
+    var keys=RAILS.filter(function(k){return A.mode[k]>0;}).sort(function(a,b){return A.mode[b]-A.mode[a];});
     var mx=Math.max.apply(null,keys.map(function(k){return A.mode[k];}).concat([1]));
     var rows=keys.map(function(k){
       return '<li data-tip="'+esc(k+'\n'+fmt(A.mode[k])+' · '+pct(A.mode[k],A.spent)+'% of spent')+'"><span class="rl-n">'+esc(k)+'</span><span class="rl-b"><i style="width:'+Math.max(1.5,A.mode[k]/mx*100)+'%"></i></span><span class="rl-v">'+esc(K(A.mode[k]))+'</span><span class="rl-p">'+pct(A.mode[k],A.spent)+'%</span></li>';
@@ -324,7 +328,8 @@
     n.push('Spend trajectory: cumulative spending by day. The overlay is the previous '+M.unit+' aligned by day number. Even pace runs from zero to the cycle’s spendable amount (month start minus savings) at the day before payday. Events mark the largest single expenses.');
     n.push('Accounts and offset come from column G of your Tracking tab: offset = (Total − savings) − Remaining. Logging an entry here updates its account so the two stay equal.');
     n.push('Bills are picked out of the Expense and Description columns: Claude, internet, Amazon, foodpanda, YouTube and Netflix. A bill is still due when it was paid in an earlier period but not yet in this one.');
-    n.push('Daily limit: Remaining, minus bills due before payday, keeping '+Math.round(Logic.BUFFER*100)+'% back, divided by the days until the '+Logic.PAYDAY_DOM+'th.');
+    n.push('Bill amounts can be edited. A paid bill\u2019s amount is changed in its row of the sheet; an amount still due is your estimate, shared with the Forecast tab.');
+    n.push('Payment rails count only ABL, Sadapay and Cash.');
     n.push('InDrive rides are rows named InDrive, or with InDrive in the description; the route is read from the description.');
     return '<details class="notes"><summary>Methodology</summary>'+n.map(function(x){return '<p>'+esc(x)+'</p>';}).join('')+'</details>';
   }

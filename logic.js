@@ -306,5 +306,5 @@ const Logic=(function(){
       return Promise.all(jobs).then(function(parts){return [].concat.apply([],parts);});
     });
   }
-  return {num:num,parseDate:parseDate,todayNum:todayNum,parseTracking:parseTracking,cyclePeriods:cyclePeriods,monthPeriods:monthPeriods,aggregate:aggregate,parseIncome:parseIncome,readAll:readAll,subscriptions:subscriptions,rides:rides,normMode:normMode,CAT_KEY:CAT_KEY,isHeading:isHeading,foodBudget:foodBudget,PAYDAY_DOM:PAYDAY_DOM,BUFFER:BUFFER,CATS:CATS,MON:MON,DAY:DAY};
+  return {num:num,parseDate:parseDate,todayNum:todayNum,parseTracking:parseTracking,cyclePeriods:cyclePeriods,monthPeriods:monthPeriods,aggregate:aggregate,parseIncome:parseIncome,readAll:readAll,subscriptions:subscriptions,subKey:subKey,rides:rides,normMode:normMode,CAT_KEY:CAT_KEY,isHeading:isHeading,foodBudget:foodBudget,PAYDAY_DOM:PAYDAY_DOM,BUFFER:BUFFER,CATS:CATS,MON:MON,DAY:DAY};
 })();

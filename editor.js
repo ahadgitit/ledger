@@ -194,7 +194,7 @@
       '<div class="fld"><label for="f-desc">Description</label><input id="f-desc" autocomplete="off" placeholder="'+(/drive/i.test(F.name)?'home to office':'a few words')+'" value="'+esc(F.desc)+'">'+
         (descs.length?'<div class="picks">'+descs.map(function(d){return '<button type="button" class="pick soft" data-desc="'+esc(d)+'">'+esc(d)+'</button>';}).join('')+'</div>':'')+'</div>'+
       '<div class="fld"><span class="lbl">Category</span><div class="picks">'+pickHTML('cat',CATS,F.cat)+'</div></div>'+
-      '<div class="fld"><span class="lbl">Paid with</span><div class="picks">'+pickHTML('mode',MODES.concat(['Other']),F.mode)+
+      '<div class="fld"><span class="lbl">Paid with</span><div class="picks">'+pickHTML('mode',MODES,F.mode)+
         (F.mode==='Other'?'<input id="f-other" class="inline" autocomplete="off" placeholder="payment mode" value="'+esc(F.other)+'">':'')+'</div>'+
         '<div id="adjust-box"></div></div>'+
       '<div class="fld"><span class="lbl">Date</span><div class="picks">'+
@@ -467,6 +467,7 @@
   });
 
   window.LedgerEditor={
+    toast:toast,
     sync:function(){
       var st=L.state(),on=(st==='ready'||st==='signedout')&&!!L.S.tracking;
       $('#add').hidden=!on;$('#bal').hidden=!on;$('#fab').hidden=!on;

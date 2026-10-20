@@ -2,7 +2,7 @@
 
 A standalone version of the Claude expense dashboard. It reads the **Monthly Expense
 Tracking** Google Sheet straight from your browser and shows payday cycles or calendar
-months, category comparisons, subscriptions and bills, the daily spend limit, and an
+months, category comparisons, subscriptions and bills, a budget for the rest of the month, and an
 overspend warning.
 
 It is a static site (HTML, CSS, JS, with no build step and no server). It is hosted on GitHub
@@ -106,7 +106,7 @@ python3 -m http.server 8000
   - **Spend trajectory**: cumulative spend with switchable layers for the previous cycle, an even pace to payday and the largest expenses, plus a crosshair that lists each day's transactions
   - **Signals**: automatic alerts for overspending, account offset, bills due, pace and category changes
   - **Accounts**: reconciliation with the sheet's offset
-  - the daily limit, bills, a category treemap, change against the previous period, a 22-week activity heatmap, payment rails, InDrive rides and the largest transactions
+  - bills and subscriptions with editable amounts (a paid bill's amount is changed in its sheet row; a due amount is your estimate, shared with Forecast), a category treemap, change against the previous period, a 22-week activity heatmap, payment rails (ABL, Sadapay and Cash), InDrive rides and the largest transactions
 - **Flows** is a money-flow diagram from account to category to item, with money in and transfers between accounts.
 - **Explorer** is an object browser for transactions and items. It has facets (category, payment mode, amount, scope), sortable columns, and an inspector that shows each object's properties, linked item, history and a link to its row in the sheet.
 - **Forecast** is a budget for the rest of the current payday cycle (today until the 20th of next month, the latest payday) that answers: can this month's **Pay myself** stay untouched?
@@ -117,10 +117,10 @@ python3 -m http.server 8000
   - **InDrive**: your low, average or high per-day rate from past months times the days left. Low and high are the averages of your cheaper and dearer months.
   - **Advance payments** to Touheed or Mama: they come out of Pay myself, not this budget, and at the next payday you owe that much less, so it goes back to Pay myself. If you already logged an advance in the sheet, it is added back to the budget.
 
-  - **Savings outlook**: where Pay myself is heading over the next 6 or 12 payday cycles, on a chart with the most likely path and the range 8 in 10 futures fall in.
+  - **Savings outlook** (at the bottom): where Pay myself is heading over the next 6 or 12 payday cycles, on a chart with the most likely path and the range 8 in 10 futures fall in.
     - **Inputs:** your base salary (130,000 by default), next payday's salary (blank means the same as base), and planned expenses for any coming month.
     - **Spending level:** whether you expect to spend 10% less than this month, the same, or 10% more.
-    - **Each month's spending** comes from this month's plan above: bills, essentials, InDrive, and your food or shopping cap (your usual where no cap is set), scaled to a month. Mama and Touheed are paid on top, less any advance in the first month.
+    - **Each month's spending** comes from this month's plan (the budget above it): bills, essentials, InDrive, and your food or shopping cap (your usual where no cap is set), scaled to a month. Mama and Touheed are paid on top, less any advance in the first month.
     - **The range:** 3,000 simulated futures resample how much your past months' everyday spending ran over or under average, and add surprise one-off buys of Rs 10,000+ as often and as big as they have happened. You can turn surprise buys off. Any shortfall this month comes out of the starting balance first.
     - A month-by-month table lists salary, payments, spending, planned expenses and the likely balance.
 
