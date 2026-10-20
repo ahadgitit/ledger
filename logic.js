@@ -65,7 +65,7 @@ const Logic=(function(){
   function parseTracking(rows){
     const cycles=[],all=[];
     let cur=null;
-    (rows||[]).forEach(function(r){
+    (rows||[]).forEach(function(r,i){
       r=r||[];
       const a=String(r[0]==null?'':r[0]).trim();
       if(isHeading(r)){cur={name:a,tx:[],g:[]};cycles.push(cur);return;}
@@ -75,7 +75,7 @@ const Logic=(function(){
       const amt=num(r[1]);
       const cat=String(r[5]==null?'':r[5]).trim().toLowerCase();
       if(isNaN(amt)||!cat) return;
-      const tx={name:a,desc:String(r[2]==null?'':r[2]),amt:amt,day:parseDate(r[3]),mode:normMode(r[4]),cat:cat};
+      const tx={name:a,desc:String(r[2]==null?'':r[2]),amt:amt,day:parseDate(r[3]),mode:normMode(r[4]),cat:cat,row:i+1,cycle:cur?cur.name:''};
       all.push(tx);
       if(cur) cur.tx.push(tx);
     });
@@ -306,5 +306,5 @@ const Logic=(function(){
       return Promise.all(jobs).then(function(parts){return [].concat.apply([],parts);});
     });
   }
-  return {num:num,parseDate:parseDate,todayNum:todayNum,parseTracking:parseTracking,cyclePeriods:cyclePeriods,monthPeriods:monthPeriods,aggregate:aggregate,parseIncome:parseIncome,readAll:readAll,subscriptions:subscriptions,rides:rides,normMode:normMode,isHeading:isHeading,foodBudget:foodBudget,PAYDAY_DOM:PAYDAY_DOM,BUFFER:BUFFER,CATS:CATS,MON:MON,DAY:DAY};
+  return {num:num,parseDate:parseDate,todayNum:todayNum,parseTracking:parseTracking,cyclePeriods:cyclePeriods,monthPeriods:monthPeriods,aggregate:aggregate,parseIncome:parseIncome,readAll:readAll,subscriptions:subscriptions,rides:rides,normMode:normMode,CAT_KEY:CAT_KEY,isHeading:isHeading,foodBudget:foodBudget,PAYDAY_DOM:PAYDAY_DOM,BUFFER:BUFFER,CATS:CATS,MON:MON,DAY:DAY};
 })();

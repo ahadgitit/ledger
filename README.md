@@ -86,15 +86,29 @@ python3 -m http.server 8000
 # open http://localhost:8000 (the origin must be listed in the OAuth client)
 ```
 
+## Workspaces
+
+- **Overview** is the command centre:
+  - a KPI strip
+  - **Spend trajectory**: cumulative spend with switchable layers for the previous cycle, an even pace to payday and the largest expenses, plus a crosshair that lists each day's transactions
+  - **Signals**: automatic alerts for overspending, account offset, bills due, pace and category changes
+  - **Accounts**: reconciliation with the sheet's offset
+  - the daily limit, bills, a category treemap, change against the previous period, a 22-week activity heatmap, payment rails, InDrive rides and the largest transactions
+- **Flows** is a money-flow diagram from account to category to item, with money in and transfers between accounts.
+- **Explorer** is an object browser for transactions and items. It has facets (category, payment mode, amount, scope), sortable columns, and an inspector that shows each object's properties, linked item, history and a link to its row in the sheet.
+- **Ctrl/Cmd + K** opens a command palette to jump to views, actions, items and transactions.
+
 ## Files
 
 | File | What it does |
 | --- | --- |
-| `index.html` | The page shell |
-| `styles.css` | Styles, with light and dark themes |
-| `logic.js` | Parsing and calculations: cycles, months, categories, subscriptions, spend limit. Unchanged from the Claude artifact |
-| `app.js` | Google sign-in, Sheets API calls, caching, rendering |
-| `editor.js` | The Add entry form and the Balances editor |
+| `index.html` | The app shell: top bar, context bar, status bar and dialogs |
+| `styles.css` | Dark Foundry/Blueprint-style theme. Category colours use a fixed slot order checked for colour-blind separation on the panel surface |
+| `logic.js` | Parsing and calculations: cycles, months, categories, subscriptions, spend limit, rides |
+| `viz.js` | Chart building blocks: scales, squarified treemap, flow layout, sparklines, sequential ramp |
+| `app.js` | Google sign-in, Sheets API calls, caching and change notifications |
+| `views.js` | Overview, Flows, Explorer, inspector and command palette |
+| `editor.js` | The Log entry form and the balances editor |
 | `config.js` | OAuth client ID and sheet ID |
 | `.github/workflows/pages.yml` | Deploys to GitHub Pages |
 

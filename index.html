@@ -5,43 +5,70 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex,nofollow">
-<title>Expense Dashboard</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='1' y='8' width='3' height='7' rx='1' fill='%232a78d6'/%3E%3Crect x='6.5' y='4' width='3' height='11' rx='1' fill='%232a78d6'/%3E%3Crect x='12' y='1' width='3' height='14' rx='1' fill='%23eb6834'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<meta name="theme-color" content="#111418">
+<title>Ledger Workspace</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='4' fill='%23111418'/%3E%3Cpath d='M4 18h16' stroke='%23738091' stroke-width='2'/%3E%3Cpath d='M6 15l4-5 3 3 5-7' fill='none' stroke='%234c90f0' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="wrap">
-  <header class="top">
-    <div>
-      <h1>Expense dashboard</h1>
-      <p class="lede" id="sub">Reads your Monthly Expense Tracking sheet.</p>
-    </div>
-    <div class="controls">
-      <div class="seg" role="group" aria-label="Period type">
-        <button type="button" id="m-cycle" data-mode="cycle" aria-pressed="true">Payday cycle</button>
-        <button type="button" id="m-month" data-mode="month" aria-pressed="false">Calendar month</button>
-      </div>
-      <button type="button" class="btn primary" id="add" hidden><span aria-hidden="true">+</span> Add entry</button>
-      <button type="button" class="btn" id="bal" hidden>Update balances</button>
-      <button type="button" class="btn" id="signin" hidden>Sign in with Google</button>
-      <button type="button" class="btn" id="refresh" hidden>Refresh</button>
-      <button type="button" class="btn" id="signout" hidden>Sign out</button>
-    </div>
-  </header>
-  <div class="status" id="status" role="status" aria-live="polite">Loading…</div>
-  <nav class="chips" id="chips" aria-label="Period"></nav>
-  <main id="main" style="display:flex;flex-direction:column;gap:18px"></main>
-  <footer class="notes" id="notes"></footer>
+<header class="topbar">
+  <a class="brand" href="#/overview" data-view="overview" aria-label="Ledger overview">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 18h16" class="lg-a"/><path d="M6 15l4-5 3 3 5-7" class="lg-b"/><circle cx="18" cy="6" r="1.8" class="lg-c"/></svg>
+    <span>LEDGER</span><em>Expense intelligence</em>
+  </a>
+  <nav class="tabs" id="tabs" aria-label="Workspaces">
+    <a href="#/overview" data-view="overview"><span class="ti">&#9635;</span>Overview</a>
+    <a href="#/flows" data-view="flows"><span class="ti">&#8780;</span>Flows</a>
+    <a href="#/explorer" data-view="explorer"><span class="ti">&#9783;</span>Explorer</a>
+  </nav>
+  <button type="button" class="cmdk" id="cmdk" aria-label="Search and commands"><span class="ci">&#9906;</span><span class="ct">Search objects, actions&hellip;</span><kbd>Ctrl K</kbd></button>
+  <div class="sync off" id="sync" title="Sheet sync"><i></i><span id="sync-t">OFFLINE</span><time id="sync-time">&ndash;</time></div>
+  <div class="actions">
+    <button type="button" class="btn primary" id="add" hidden><span aria-hidden="true">+</span> Log entry</button>
+    <button type="button" class="btn" id="bal" hidden>Update balances</button>
+    <button type="button" class="btn icon" id="refresh" hidden aria-label="Refresh from the sheet" title="Refresh">&#8635;</button>
+    <button type="button" class="btn primary" id="signin" hidden>Sign in</button>
+    <button type="button" class="btn ghost" id="signout" hidden>Sign out</button>
+  </div>
+</header>
+
+<div class="ctx">
+  <div class="crumb" id="crumb"></div>
+  <div class="seg" role="group" aria-label="Period type">
+    <button type="button" id="m-cycle" data-mode="cycle" aria-pressed="true">Payday cycle</button>
+    <button type="button" id="m-month" data-mode="month" aria-pressed="false">Calendar month</button>
+  </div>
+  <nav class="periods" id="periods" aria-label="Period"></nav>
 </div>
-<div id="tip" role="tooltip"></div>
-<button type="button" class="fab" id="fab" hidden aria-label="Add entry">+</button>
+
+<main class="view" id="view"></main>
+
+<footer class="statusbar">
+  <span class="status-line" id="status-line" role="status" aria-live="polite">Starting&hellip;</span>
+  <span class="sb"><b>SRC</b> <span id="sb-src">&ndash;</span></span>
+  <span class="sb" id="sb-rows">&ndash;</span>
+  <span class="sb" id="sb-req">&ndash;</span>
+  <span class="sb"><b>TZ</b> Asia/Karachi</span>
+</footer>
+
+<div id="tip" class="tip" role="tooltip"></div>
+<button type="button" class="fab" id="fab" hidden aria-label="Log entry">+</button>
 <div class="toast" id="toast" role="status" aria-live="polite" popover="manual" hidden></div>
 <datalist id="names"></datalist>
 
+<dialog class="cmd" id="cmd" aria-label="Search and commands">
+  <div class="cmd-in">
+    <div class="cmd-h"><span>&#9906;</span><input id="cmd-q" autocomplete="off" spellcheck="false" placeholder="Search items, transactions, categories, actions&hellip;" aria-label="Search"><kbd>Esc</kbd></div>
+    <ul class="cmd-r" id="cmd-r" role="listbox"></ul>
+    <div class="cmd-f"><span><kbd>&uarr;</kbd><kbd>&darr;</kbd> move</span><span><kbd>Enter</kbd> open</span><span><kbd>/</kbd> search Explorer</span></div>
+  </div>
+</dialog>
+
 <dialog class="sheet" id="add-dlg" aria-labelledby="add-title">
   <div class="sheet-in">
-    <header class="sheet-h"><h2 id="add-title">New entry</h2><button type="button" class="x" data-close aria-label="Close">&times;</button></header>
+    <header class="sheet-h"><h2 id="add-title"><span class="dlg-k">NEW OBJECT</span>Log entry</h2><button type="button" class="x" data-close aria-label="Close">&times;</button></header>
     <div class="sheet-b" id="add-body"></div>
     <footer class="sheet-f">
       <label class="again"><input type="checkbox" id="add-again"> Add another</label>
@@ -53,7 +80,7 @@
 
 <dialog class="sheet" id="bal-dlg" aria-labelledby="bal-title">
   <div class="sheet-in">
-    <header class="sheet-h"><h2 id="bal-title">Account balances</h2><button type="button" class="x" data-close aria-label="Close">&times;</button></header>
+    <header class="sheet-h"><h2 id="bal-title"><span class="dlg-k">COLUMN G</span>Account balances</h2><button type="button" class="x" data-close aria-label="Close">&times;</button></header>
     <div class="sheet-b" id="bal-body"></div>
     <footer class="sheet-f">
       <span class="hint-line" id="bal-hint"></span>
@@ -61,9 +88,12 @@
     </footer>
   </div>
 </dialog>
+
 <script src="config.js"></script>
 <script src="logic.js"></script>
+<script src="viz.js"></script>
 <script src="app.js"></script>
+<script src="views.js"></script>
 <script src="editor.js"></script>
 </body>
 </html>

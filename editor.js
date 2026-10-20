@@ -468,7 +468,7 @@
 
   window.LedgerEditor={
     sync:function(){
-      var st=L.state(),on=st==='ready'||st==='signedout';
+      var st=L.state(),on=(st==='ready'||st==='signedout')&&!!L.S.tracking;
       $('#add').hidden=!on;$('#bal').hidden=!on;$('#fab').hidden=!on;
     }
   };
