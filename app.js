@@ -8,7 +8,6 @@
   var API='https://sheets.googleapis.com/v4/spreadsheets/';
   var TRACK_RANGE='Tracking!A1:G5000';
   var INCOME_RANGE="'Dashboard Data'!A1:L120";
-  var PLAN_RANGE='Plan!A1:E300';
 
   var local={};
   try{local=JSON.parse(localStorage.getItem(LS_CFG)||'{}')||{};}catch(e){}
@@ -45,7 +44,7 @@
   }catch(e){}
 
   function save(){
-    try{localStorage.setItem(LS,JSON.stringify({tracking:S.tracking,incomeRows:S.incomeRows,planRows:S.planRows,planMissing:S.planMissing,at:S.at,mode:S.mode,sel:S.sel}));}catch(e){}
+    try{localStorage.setItem(LS,JSON.stringify({tracking:S.tracking,incomeRows:S.incomeRows,at:S.at,mode:S.mode,sel:S.sel}));}catch(e){}
   }
   function restore(){
     try{
@@ -56,7 +55,6 @@
       if(Array.isArray(j.tracking)){
         S.tracking=j.tracking;S.incomeRows=j.incomeRows||null;
         S.income=Logic.parseIncome(S.incomeRows);S.at=j.at||0;S.stale=true;
-        S.planRows=Array.isArray(j.planRows)?j.planRows:null;S.planMissing=!!j.planMissing;
       }
     }catch(e){}
   }
@@ -71,7 +69,6 @@
     if(c==='popup_failed') return 'The Google sign-in window could not open. Allow pop-ups for this site, then press Sign in.';
     if(c==='auth'||c==='unauthorized') return 'Your Google sign-in has expired or was refused. Press Sign in.';
     if(c==='forbidden') return 'Google refused access to the sheet. Sign out, then sign in again with the Google account that owns the Monthly Expense Tracking sheet and allow it to see and edit your spreadsheets.';
-    if(c==='plan_write') return 'Google refused to save the plan: '+(e.message||'unknown reason')+'.';
     if(c==='not_found') return 'The sheet or its Tracking tab was not found. Check the sheet ID in config.js and that the tab is still named Tracking.';
     if(c==='rate_limited'||c==='upstream_error'||c==='network') return 'Google Sheets did not answer. '+(S.tracking?'Showing the last saved copy. ':'')+'Press Refresh to try again.';
     return 'The sheet could not be loaded ('+(c||(e&&e.message)||'unknown error')+'). Press Refresh to try again.';
@@ -192,10 +189,7 @@
       // The optional Dashboard Data tab: stop asking once Google says it does not exist.
       return (noIncome?Promise.reject({code:'not_found'}):call(INCOME_RANGE)).then(function(ir){
         S.incomeRows=ir;S.income=Logic.parseIncome(ir);
-      }).catch(function(e){if(e&&e.code==='not_found') noIncome=true;S.incomeRows=null;S.income={};}).then(function(){
-        // The Plan tab holds the savings forecast settings; it is created on first save.
-        return call(PLAN_RANGE).then(function(pr){S.planRows=pr;S.planMissing=false;},function(e){if(e&&e.code==='not_found'){S.planRows=null;S.planMissing=true;}});
-      }).then(function(){S.calls=calls;});
+      }).catch(function(e){if(e&&e.code==='not_found') noIncome=true;S.incomeRows=null;S.income={};}).then(function(){S.calls=calls;});
     }).then(function(){
       save();
       notify('data');
@@ -249,20 +243,6 @@
     batch:function(data,input){return api('/values:batchUpdate',{method:'POST',body:{valueInputOption:input||'RAW',data:data}});},
     clear:function(range){return api('/values/'+encodeURIComponent(range)+':clear',{method:'POST',body:{}});},
     refresh:function(manual){retried=false;return load(!!manual);},
-    // Replace the Plan tab's contents (creating the tab the first time).
-    savePlan:function(rows){
-      var range='Plan!A1:D'+rows.length;
-      // Ask Google which tabs exist right now instead of trusting a cached flag.
-      return api('?fields=sheets.properties.title').then(function(meta){
-        var has=(meta.sheets||[]).some(function(x){return x.properties&&x.properties.title==='Plan';});
-        if(has) return;
-        return api(':batchUpdate',{method:'POST',body:{requests:[{addSheet:{properties:{title:'Plan',gridProperties:{rowCount:300,columnCount:6}}}}]}})
-          .catch(function(e){if(!/already exists/i.test(e&&e.message||'')) throw e;});
-      }).then(function(){S.planMissing=false;return api('/values/'+encodeURIComponent(PLAN_RANGE)+':clear',{method:'POST',body:{}});})
-        .then(function(){return api('/values/'+encodeURIComponent(range)+'?valueInputOption=RAW',{method:'PUT',body:{range:range,majorDimension:'ROWS',values:rows}});})
-        .then(function(){S.planRows=rows.map(function(r){return r.map(function(x){return x==null?'':String(x);});});save();notify('data');})
-        .catch(function(e){if(e&&e.code==='not_found'){e.code='plan_write';} throw e;});
-    },
     on:function(f){listeners.push(f);}
   };
 
