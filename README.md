@@ -113,7 +113,7 @@ python3 -m http.server 8000
   - **Predict food or shopping.** To predict food, you must set a shopping cap. To predict shopping, you must set a food cap. Neither has a default; a button fills in your usual amount if you want it.
   - **Food graph**: what you spent on food in each past month. A dashed line marks your food cap, or the food budget it predicts.
   - **Bills and subscriptions** (Claude, internet, Amazon, foodpanda, YouTube, and any you add): amounts are editable and start from what you last paid. Tick the ones still to pay.
-  - **Monthly essentials** (laundry, grooming and toiletries, medicine, gas, everything else, and any you add): each starts at your average for this many days over past months, and each can be edited. One-off buys of Rs 10,000 or more are left out of that average.
+  - **Monthly essentials** (laundry, grooming and toiletries, and any you add): each starts at your average for this many days over past months, and each can be edited.
   - **InDrive**: your low, average or high per-day rate from past months times the days left. Low and high are the averages of your cheaper and dearer months.
   - **Advance payments** to Touheed or Mama: they come out of Pay myself, not this budget, and at the next payday you owe that much less, so it goes back to Pay myself. If you already logged an advance in the sheet, it is added back to the budget.
 

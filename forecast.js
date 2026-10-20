@@ -4,7 +4,7 @@
    next month, the latest payday). Column G's Remaining is the money there is, Pay
    myself already set aside. From it come:
    - bills and subscriptions still to pay (amounts editable, defaults from the sheet);
-   - monthly essentials (laundry, grooming, medicine, gas, the rest), predicted from
+   - monthly essentials (laundry, grooming and any you add), predicted from
      past months and editable;
    - InDrive, at your low, average or high rate from past months;
    - and either a shopping cap, leaving the food budget, or a food cap, leaving the
@@ -21,10 +21,7 @@ var Forecast=(function(){
   var RIDE_LV=[{k:'low',t:'Low'},{k:'avg',t:'Average'},{k:'high',t:'High'}];
   var ESS=[
     {k:'laundry',t:'Laundry',re:/laund|laubdry|dry ?clean/},
-    {k:'groom',t:'Grooming and toiletries',re:/razor|blade|gill?ett?e|gellete|shav|groom|deod|shampoo|haircut|body ?wash|tooth|oral ?max/},
-    {k:'health',t:'Medicine and health',re:/\bmeds?\b|medicine|therap|doctor|pharm|clinic|fever/},
-    {k:'gas',t:'Gas and home',re:/geyser|gas refill|cylinder/},
-    {k:'other',t:'Everything else',hint:'repairs, fun, outings, odd buys'}
+    {k:'groom',t:'Grooming and toiletries',re:/razor|blade|gill?ett?e|gellete|shav|groom|deod|shampoo|haircut|body ?wash|tooth|oral ?max/}
   ];
   var BILL_RE=/claude|internet|amazon|youtube|netflix|subscri/;
 
@@ -63,10 +60,8 @@ var Forecast=(function(){
         if(/^(savings|transfer|influx|loaned|family\/home|renovation)$/.test(cat)) return;
         if(/tou?heed|tohid|\bmama\b|advance pay|\btransport\b/.test(s)||BILL_RE.test(s)) return;
         if(/in\s*-?\s*drive/.test(s)||cat==='transport') return;
-        var e=ESS.find(function(x){return x.re&&x.re.test(s);});
-        if(e){h.ess[e.k]+=t.amt;return;}
-        // one-off buys of 10,000 or more (an oven, a course) are not the usual month
-        if(t.amt<10000) h.ess.other+=t.amt;
+        var e=ESS.find(function(x){return x.re.test(s);});
+        if(e) h.ess[e.k]+=t.amt;
       });
       out.push(h);
     }
@@ -106,7 +101,7 @@ var Forecast=(function(){
     (bs._extra||[]).forEach(function(x,j){bills.push({key:'x'+j,label:x.label||'',extra:true,amt:x.amt||0,on:true});});
     var ess=ESS.map(function(e){
       var d=r100(perDay(h,function(x){return x.ess[e.k];})*days);
-      return {key:e.k,label:e.t,hint:e.hint,def:d,amt:s.ess[e.k]!=null?s.ess[e.k]:d,
+      return {key:e.k,label:e.t,def:d,amt:s.ess[e.k]!=null?s.ess[e.k]:d,
         months:h.filter(function(x){return x.ess[e.k]>0;}).length};
     });
     (s.essExtra||[]).forEach(function(x,j){ess.push({key:'x'+j,label:x.label||'',extra:true,amt:x.amt||0});});
@@ -169,7 +164,7 @@ var Forecast=(function(){
       return itemRow('bill',b,b.paid?'paid'+(b.when!=null?' '+esc(fmtDay(b.when)):'')+' · already out of Remaining':b.extra?'added by you':'due'+(b.when!=null?' '+esc(fmtDay(b.when)):''),true);
     }).join('');
     var ess=R.ess.map(function(e){
-      return itemRow('ess',e,e.extra?'added by you':(e.hint?esc(e.hint)+' · ':'')+'usually '+esc(fmt(e.def))+(e.months<R.hist.length?' · in '+e.months+' of '+R.hist.length+' months':''));
+      return itemRow('ess',e,e.extra?'added by you':'usually '+esc(fmt(e.def))+(e.months<R.hist.length?' · in '+e.months+' of '+R.hist.length+' months':''));
     }).join('');
     var lv=R.lv,rideSeg='<div class="seg fp-seg" role="group" aria-label="InDrive estimate">'+RIDE_LV.map(function(x){
       return '<button type="button" data-ride="'+x.k+'" aria-pressed="'+(I.ride===x.k)+'">'+x.t+'<small>'+esc(fmt(r100(lv[x.k]*d)))+'</small></button>';}).join('')+'</div>';
@@ -225,7 +220,7 @@ var Forecast=(function(){
       '<div class="fp-reset"><button type="button" class="btn ghost sm" id="fp-reset">Reset to defaults</button></div>'+
       '<details class="notes"><summary>How this is worked out</summary>'+
         '<p>Remaining comes from column G of '+esc(R.cur.name)+', with your Pay myself already set aside. Payday is taken as the 20th, the latest you usually get paid, so this covers '+d+' days, today to '+esc(until)+'.</p>'+
-        '<p>Bills you tick, your monthly essentials and InDrive are taken off. Paid bills are already out of Remaining, so they start unticked. Essentials and InDrive start at your average per day over your last '+R.hist.length+' full months, times the days left; one-off buys of Rs 10,000 or more are left out of that average.</p>'+
+        '<p>Bills you tick, your monthly essentials and InDrive are taken off. Paid bills are already out of Remaining, so they start unticked. Essentials and InDrive start at your average per day over your last '+R.hist.length+' full months, times the days left.</p>'+
         '<p>Predict food: your shopping cap is taken off too, and what is left is for food. Predict shopping: your food cap is taken off, and what is left is for shopping.</p>'+
         '<p>An advance to Touheed or Mama is paid out of Pay myself, so it lowers what you keep this month but not this budget, and at the next payday you owe that much less. If you already logged it in the sheet, Remaining went down by it, so it is added back here.</p>'+
         '<p>What you enter here is kept in this browser.</p></details>'+
