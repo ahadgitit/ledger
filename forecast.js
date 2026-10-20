@@ -22,7 +22,7 @@ var Forecast=(function(){
   // ---------------------------------------------------------------- plan
   var KEYS=[
     ['minPay','Minimum pay'],['extra','Usual extra pay (overtime, bonuses)'],
-    ['family','Family support (Mama)'],['touheed','Touheed (transport and advances)'],['otherFixed','Other fixed costs'],
+    ['family','Family support (Mama)'],['touheed','Touheed transport fee'],['touheedAdvance','Already advanced to Touheed'],['otherFixed','Other fixed costs'],
     ['balance','Savings balance today'],['goal','Savings goal'],['goalDate','Goal date']
   ];
   function parsePlan(rows){
@@ -39,6 +39,7 @@ var Forecast=(function(){
         if(!isNaN(amt)&&amt) p.upcoming.push({month:a,item:String(r[1]==null?'':r[1]).trim(),amount:amt,note:String(r[3]==null?'':r[3])});
         return;
       }
+      if(al==='touheed (transport and advances)') al='touheed transport fee';
       KEYS.forEach(function(k){
         if(al===k[1].toLowerCase()) p[k[0]]=k[0]==='goalDate'?String(r[1]==null?'':r[1]).trim():Logic.num(r[1]);
       });
@@ -173,17 +174,26 @@ var Forecast=(function(){
     var curKey=ymKey(cur.start);
     // defaults from history where the plan is silent
     var recent=done.slice(-4);
+    // Pay myself rows are the running savings balance, so the latest one is today's balance
+    // and the change between cycles is what was actually saved.
+    var sav=M.all.filter(function(t){return t.cat==='savings'&&t.amt>0;});
     var sug={
-      touheed:Math.round(median(recent.map(function(c){return c.touheed;}))/500)*500,
+      touheed:27000,
+      touheedLogged:Math.round(median(recent.map(function(c){return c.touheed;}))/500)*500,
       family:35000,
       bills:Math.round(median(done.slice(-3).map(function(c){return c.bills;}))),
-      balance:M.all.filter(function(t){return t.cat==='savings';}).reduce(function(s,t){return s+t.amt;},0)
+      balance:sav.length?sav[sav.length-1].amt:0
     };
+    var saved=[],prevBal=null;
+    ct.forEach(function(c){if(c.saved>0){saved.push({label:c.label,name:c.name,bal:c.saved,delta:prevBal==null?null:c.saved-prevBal,open:c.open});prevBal=c.saved;}});
     plan=plan||{upcoming:[]};
     function val(k,d){var v=plan[k];return isFinite(v)&&v!==''&&v!=null?v:d;}
     var inc=val('minPay',0)+val('extra',0),minPay=val('minPay',0);
-    var fixed={family:val('family',sug.family),touheed:val('touheed',sug.touheed),other:val('otherFixed',0),bills:sug.bills};
+    var fixed={family:val('family',sug.family),touheed:val('touheed',sug.touheed),advance:val('touheedAdvance',0),other:val('otherFixed',0),bills:sug.bills};
     var fixedTot=fixed.family+fixed.touheed+fixed.other+fixed.bills;
+    // An advance Touheed already took comes off the next cycle's fee only.
+    var adv=Math.min(fixed.advance,fixed.touheed);
+    var fixedK=cycles.map(function(c,k){return fixedTot-(k===0?adv:0);});
     var planned=cycles.map(function(c){return plan.upcoming.filter(function(u){return u.month===c.key;}).reduce(function(s,u){return s+u.amount;},0);});
     var plannedNow=plan.upcoming.filter(function(u){return u.month===curKey;}).reduce(function(s,u){return s+u.amount;},0);
     var balance=val('balance',sug.balance),goal=val('goal',0);
@@ -200,7 +210,7 @@ var Forecast=(function(){
         cum[s*(horizon+1)]=acc;
         for(var k=0;k<horizon;k++){
           var v=simVar(P,cycles[k].len,r,out);
-          var sv=inc-fixedTot-planned[k]-v;
+          var sv=inc-fixedK[k]-planned[k]-v;
           if(k===0){next[s]=sv;nextVar[s]=v;for(var j=0;j<4;j++) parts[j].push(out[j]);}
           acc+=sv;
           cum[s*(horizon+1)+k+1]=acc;
@@ -246,8 +256,8 @@ var Forecast=(function(){
       if(goal>0&&s50>0){var need=goal-main.bands[0].p50,base=need/s50;l.sooner=need>0&&base<=60?(base-need/(s50+l.d))*len:0;}
     });
     // the amount that can go to savings on payday with 80% confidence of not running short
-    var safe=inc?inc-fixedTot-planned[0]-q(main.nextVar,0.8):null;
-    return {ct:ct,done:done,len:len,cycles:cycles,curKey:curKey,inc:inc,minPay:minPay,extra:val('extra',0),fixed:fixed,fixedTot:fixedTot,
+    var safe=inc?inc-fixedK[0]-planned[0]-q(main.nextVar,0.8):null;
+    return {ct:ct,done:done,len:len,cycles:cycles,curKey:curKey,inc:inc,minPay:minPay,extra:val('extra',0),fixed:fixed,fixedTot:fixedTot,fixedK:fixedK,adv:adv,saved:saved,
       planned:planned,plannedNow:plannedNow,balance:balance,goal:goal,goalDate:plan.goalDate||'',sug:sug,main:main,alt:alt,altName:scen==='usual'?'modest':'usual',
       levers:levers,safe:safe,s50:s50,H:H,horizon:horizon,scen:scen};
   }
@@ -284,7 +294,7 @@ var Forecast=(function(){
     if(R.error) return bar+'<div class="pnl"><div class="pnl-b"><div class="empty">'+esc(R.error)+'</div></div></div>';
     if(!R.inc){
       return bar+'<section class="pnl fc-setup"><div class="pnl-b"><div class="fc-setup-in"><div class="fc-setup-k">SAVINGS FORECAST</div><h2>Tell the model what you earn</h2>'+
-        '<p>Enter your minimum pay once. Your usual extra pay (overtime, bonuses), Mama’s 35,000, Touheed’s transport and anything coming up next month make the forecast sharper. Everything is saved to a new <b>Plan</b> tab in your sheet.</p>'+
+        '<p>Enter your minimum pay once. Your usual extra pay (overtime, bonuses), Mama’s 35,000, Touheed’s 27,000 fee and anything coming up next month make the forecast sharper. Everything is saved to a new <b>Plan</b> tab in your sheet.</p>'+
         '<button type="button" class="btn primary" data-fc-plan>Set up plan</button></div>'+
         '<div class="fc-pre"><div><span>Your spending forecast for next cycle</span><b>'+esc(fmt(q(R.main.nextVar,0.5)))+'</b><small>food, getting around, personal and one-offs · typical</small></div>'+
         '<div><span>Fixed costs found</span><b>'+esc(fmt(R.fixedTot))+'</b><small>Mama '+esc(K(R.fixed.family))+' · Touheed '+esc(K(R.fixed.touheed))+' · bills '+esc(K(R.fixed.bills))+'</small></div></div></div></section>';
@@ -304,8 +314,9 @@ var Forecast=(function(){
       ui.pnl('fc-wf','Where next cycle’s pay goes',esc(R.cycles[0].label)+' · typical','<div id="fc-water"></div>',{cls:'s7'})+
       leversPanel(ui)+
       inputsPanel(ui)+upcomingPanel(ui)+
+      savedPanel(ui)+
       ui.pnl('fc-bt','Model check','<span id="fc-bt-m"></span>','<div id="fc-btest"></div>',{cls:'s6'})+
-      ui.pnl('fc-how','How this forecast works','',howHTML(),{cls:'s6'})+
+      ui.pnl('fc-how','How this forecast works','',howHTML(),{cls:'s12'})+
       '</div>';
     return html;
   }
@@ -322,11 +333,29 @@ var Forecast=(function(){
     var f=R.fixed,last=R.done.slice(-6);
     var mx=Math.max.apply(null,last.map(function(c){return Math.abs(c.touheed);}).concat([1]));
     var th=last.map(function(c){return '<div class="th-c" data-tip="'+esc(c.name+'\nTouheed net '+fmt(c.touheed)+(c.lentT?'\nincl. lent '+fmt(c.lentT):''))+'"><i style="height:'+Math.max(2,Math.abs(c.touheed)/mx*100)+'%"></i><span>'+esc(c.label)+'</span></div>';}).join('');
-    var rows=[['Minimum pay',R.minPay,'you'],['Usual extra pay',R.extra,'you'],['Family support (Mama)',f.family,'you'],['Touheed: transport + advances',f.touheed,'you'],['Bills (Claude, internet, …)',f.bills,'history'],['Other fixed costs',f.other,'you']];
+    var rows=[['Minimum pay',R.minPay,'you'],['Usual extra pay',R.extra,'you'],['Family support (Mama)',f.family,'you'],['Touheed transport fee',f.touheed,'you']];
+    if(R.adv) rows.push(['Already advanced to Touheed (off '+R.cycles[0].label+' only)',-R.adv,'you']);
+    rows.push(['Bills (Claude, internet, …)',f.bills,'history'],['Other fixed costs',f.other,'you']);
     return ui.pnl('fc-in','Model inputs','per cycle · cycle ≈ '+R.len+' days',
       '<dl class="ledger">'+rows.map(function(r){return '<div><dt>'+esc(r[0])+' <em class="src '+r[2]+'">'+(r[2]==='you'?'plan':'detected')+'</em></dt><dd>'+esc(fmt(r[1]))+'</dd></div>';}).join('')+'</dl>'+
-      '<div class="ins-sec">Touheed per cycle (transport, loans, returns)</div><div class="th-bars">'+th+'</div>'+
-      '<p class="fc-note">Loans to Touheed that come back as transport deductions are netted in each cycle, so this is what he really costs. Suggested from your last four cycles: <b>'+esc(fmt(R.sug.touheed))+'</b>.</p>',{cls:'s6'});
+      '<div class="ins-sec">Paid to Touheed per cycle, as logged</div><div class="th-bars">'+th+'</div>'+
+      '<p class="fc-note">Context only. He often takes part of next month’s fee early as a loan, so fees and advances land in different cycles in the sheet. The forecast uses his fee from your plan, and any advance he already took comes off the next cycle only.</p>',{cls:'s6'});
+  }
+  // What was really saved each cycle: the change in the Pay myself balance.
+  function savedPanel(ui){
+    var hs=R.saved.filter(function(x){return x.delta!=null;}).slice(-8);
+    if(!hs.length) return ui.pnl('fc-sv','Saved per cycle so far','','<div class="empty">Needs two cycles with a Pay myself row.</div>',{cls:'s6'});
+    var mx=Math.max.apply(null,hs.map(function(x){return Math.abs(x.delta);}).concat([Math.abs(R.s50),1]));
+    var avg=hs.reduce(function(t,x){return t+x.delta;},0)/hs.length;
+    var ref=Math.max(0,R.s50)/mx*100;
+    var bars=hs.map(function(x){
+      return '<div class="sv-c" data-tip="'+esc(x.name+'\nPay myself '+fmt(x.bal)+'\n'+(x.delta>=0?'+':'\u2212')+fmt(Math.abs(x.delta))+' saved'+(x.open?'\nThis cycle so far':''))+'">'+
+        '<b>'+(x.delta>0?'+':'')+esc(K(x.delta))+'</b><div class="sv-t"><i class="'+(x.delta<0?'neg':x.delta===0?'zero':'')+(x.open?' open':'')+'" style="height:'+Math.max(2,Math.abs(x.delta)/mx*100)+'%"></i>'+
+        (R.s50>0?'<em style="bottom:'+ref.toFixed(1)+'%"></em>':'')+'</div><span>'+esc(x.label)+'</span></div>';
+    }).join('');
+    return ui.pnl('fc-sv','Saved per cycle so far','average '+(avg>=0?'+':'\u2212')+esc(K(Math.abs(avg)))+(R.s50>0?' \u00b7 forecast '+esc(K(R.s50)):''),
+      '<div class="sv-bars">'+bars+'</div><div class="legend sm"><span><i class="sw sv-g"></i>Pay myself growth</span>'+(R.s50>0?'<span><i class="sw ln sv-f"></i>Forecast saving per cycle</span>':'')+'</div>'+
+      '<p class="fc-note">Each bar is how much your Pay myself balance grew from the cycle before. The big jumps came with high overtime, which may not repeat, so the forecast uses the pay in your plan instead of these jumps.</p>',{cls:'s6'});
   }
   function upcomingPanel(ui){
     var plan=parsePlan(L.S.planRows)||{upcoming:[]};
@@ -342,7 +371,7 @@ var Forecast=(function(){
   }
   function howHTML(){
     var h=R.H;
-    return '<div class="how"><p><b>Pay minus fixed costs</b> comes from your plan: minimum pay plus usual extra, less Mama, Touheed, other fixed costs and the bills detected in your sheet.</p>'+
+    return '<div class="how"><p><b>Pay minus fixed costs</b> comes from your plan: minimum pay plus usual extra, less Mama, Touheed’s fee (minus any advance he already took, next cycle only), other fixed costs and the bills detected in your sheet. Your <b>starting balance</b> is your latest Pay myself row, since that row is your running savings.</p>'+
       '<p><b>Everyday spending</b> is simulated by stitching together random 7-day stretches of your own last '+h.N+' days'+(h.gaps?' (skipping '+h.gaps+' days with nothing logged)':'')+' (food, InDrive and other rides, personal). Recent weeks count more: a week from two months ago counts half as much as this week. This keeps your real rhythm, like weekend rides and payday treats, instead of a flat average.</p>'+
       '<p><b>One-off buys</b> of Rs 3,000 or more (an oven, a course, a perfume) are simulated separately: you’ve had about '+(h.rate*30).toFixed(1)+' per cycle lately, with sizes drawn from your real ones.</p>'+
       '<p><b>'+SIMS.toLocaleString('en-US')+' simulated futures</b> give the bands: the dark band is the middle half of outcomes, the light band 80% of them. <b>Modest</b> and <b>Lean</b> only use your cheaper weeks, so they describe how you’ve already lived, not wishful targets.</p></div>';
@@ -358,14 +387,17 @@ var Forecast=(function(){
     var m=R.main,a=R.alt,n=R.horizon;
     var W=Math.max(280,el.clientWidth),narrow=W<560,H=narrow?230:280,mg={l:narrow?44:56,r:narrow?10:18,t:18,b:26};
     var pw=W-mg.l-mg.r,ph=H-mg.t-mg.b;
-    var vals=[];m.bands.forEach(function(b){vals.push(b.p10,b.p90);});a.bands.forEach(function(b){vals.push(b.p50);});
+    // your real balance at each past payday (Pay myself), leading into the forecast
+    var hp=R.saved.filter(function(x){return !x.open;}).slice(narrow?-3:-5),h=hp.length;
+    var vals=hp.map(function(x){return x.bal;});m.bands.forEach(function(b){vals.push(b.p10,b.p90);});a.bands.forEach(function(b){vals.push(b.p50);});
     if(R.goal>0) vals.push(R.goal);
     // Fit the axis to the paths (a balance axis need not start at zero) with round steps.
     var vmin=Math.min.apply(null,vals),vmax=Math.max.apply(null,vals),span=Math.max(1,vmax-vmin);
     var step=niceStep(span/4),lo=Math.floor((vmin-span*0.04)/step)*step,hi=Math.ceil((vmax+span*0.04)/step)*step;
-    function X(k){return mg.l+k/n*pw;}
+    function X(k){return mg.l+(k+h)/(n+h)*pw;}
     function Y(v){return mg.t+ph-(v-lo)/(hi-lo)*ph;}
-    var s='<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" role="img" aria-label="Projected savings balance over the next '+n+' cycles">';
+    var s='<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" role="img" aria-label="Savings balance: the last '+h+' paydays and the next '+n+' cycles">';
+    if(h) s+='<rect class="past" x="'+mg.l+'" y="'+mg.t+'" width="'+(X(0)-mg.l)+'" height="'+ph+'"/>';
     for(var v=lo;v<=hi+step/2;v+=step){var y=Y(v);s+='<line class="grid" x1="'+mg.l+'" x2="'+(W-mg.r)+'" y1="'+y+'" y2="'+y+'"/><text class="tick" x="'+(mg.l-8)+'" y="'+(y+3.5)+'" text-anchor="end">'+K(v)+'</text>';}
     if(lo<0&&hi>0) s+='<line class="axis" x1="'+mg.l+'" x2="'+(W-mg.r)+'" y1="'+Y(0)+'" y2="'+Y(0)+'"/>';
     function area(k1,k2){
@@ -376,6 +408,11 @@ var Forecast=(function(){
     s+='<path class="fan-o" d="'+area('p90','p10')+'"/><path class="fan-i" d="'+area('p75','p25')+'"/>';
     s+='<path class="fan-alt" d="'+a.bands.map(function(b,k){return (k?'L':'M')+Viz.r1(X(k))+','+Viz.r1(Y(b.p50));}).join(' ')+'"/>';
     s+='<path class="fan-m" d="'+m.bands.map(function(b,k){return (k?'L':'M')+Viz.r1(X(k))+','+Viz.r1(Y(b.p50));}).join(' ')+'"/>';
+    if(h){
+      s+='<path class="hist" d="'+hp.map(function(x,i){return (i?'L':'M')+Viz.r1(X(i-h))+','+Viz.r1(Y(x.bal));}).join(' ')+' L'+Viz.r1(X(0))+','+Viz.r1(Y(m.bands[0].p50))+'"/>';
+      hp.forEach(function(x,i){s+='<circle class="hist-d" cx="'+Viz.r1(X(i-h))+'" cy="'+Viz.r1(Y(x.bal))+'" r="3.5"/>';});
+      s+='<line class="now" x1="'+X(0)+'" x2="'+X(0)+'" y1="'+mg.t+'" y2="'+(mg.t+ph)+'"/><text class="now-t" x="'+(X(0)-5)+'" y="'+(mg.t+11)+'" text-anchor="end">SAVED</text><text class="now-t" x="'+(X(0)+5)+'" y="'+(mg.t+11)+'">FORECAST</text>';
+    }
     if(R.goal>0){
       s+='<line class="goal" x1="'+mg.l+'" x2="'+(W-mg.r)+'" y1="'+Y(R.goal)+'" y2="'+Y(R.goal)+'"/><text class="goal-t" x="'+(mg.l+6)+'" y="'+(Y(R.goal)-6)+'">GOAL '+K(R.goal)+'</text>';
       if(m.goalHit!=null) s+='<circle class="goal-d" cx="'+X(m.goalHit)+'" cy="'+Y(R.goal)+'" r="5"/>';
@@ -384,20 +421,26 @@ var Forecast=(function(){
     var endv=m.bands[n].p50;
     s+='<circle class="fan-d" cx="'+X(n)+'" cy="'+Y(endv)+'" r="4"/><text class="fan-t" x="'+(X(n)-8)+'" y="'+(Y(endv)-10)+'" text-anchor="end">'+esc(K(endv))+'</text>';
     var every=Math.max(1,Math.ceil(n/(narrow?6:12)));
+    hp.forEach(function(x,i){s+='<text class="tick past-t" x="'+X(i-h)+'" y="'+(H-8)+'" text-anchor="middle">'+esc(x.label)+'</text>';});
     for(var k=0;k<=n;k+=every) s+='<text class="tick" x="'+X(k)+'" y="'+(H-8)+'" text-anchor="middle">'+(k===0?'Now':esc(R.cycles[k-1].label))+'</text>';
     s+='<line class="xh" id="fc-xh" x1="0" x2="0" y1="'+mg.t+'" y2="'+(mg.t+ph)+'" visibility="hidden"/><rect class="hit" id="fc-hit" x="'+mg.l+'" y="'+mg.t+'" width="'+pw+'" height="'+ph+'"/></svg>';
     el.innerHTML=s;
-    $('#fc-leg').innerHTML='<span><i class="sw ln cum"></i>'+esc(SCEN[R.scen].label)+', typical</span><span><i class="sw fan-i"></i>Middle half of outcomes</span><span><i class="sw fan-o"></i>80% of outcomes</span><span><i class="sw ln prev"></i>'+esc(SCEN[R.altName].label)+', typical</span>'+(R.goal>0?'<span><i class="sw ln goal"></i>Goal</span>':'')+(R.planned.some(function(p){return p>0;})?'<span><i class="sw ev"></i>Planned expense</span>':'');
+    $('#fc-leg').innerHTML=(h?'<span><i class="sw ln hist"></i>Saved so far (Pay myself)</span>':'')+'<span><i class="sw ln cum"></i>'+esc(SCEN[R.scen].label)+', typical</span><span><i class="sw fan-i"></i>Middle half of outcomes</span><span><i class="sw fan-o"></i>80% of outcomes</span><span><i class="sw ln prev"></i>'+esc(SCEN[R.altName].label)+', typical</span>'+(R.goal>0?'<span><i class="sw ln goal"></i>Goal</span>':'')+(R.planned.some(function(p){return p>0;})?'<span><i class="sw ev"></i>Planned expense</span>':'');
     var hit=$('#fc-hit'),xh=$('#fc-xh');
     function at(ev){
-      var r=hit.getBoundingClientRect(),k=Math.max(0,Math.min(n,Math.round((ev.clientX-r.left)/r.width*n)));
+      var r=hit.getBoundingClientRect(),k=Math.max(-h,Math.min(n,Math.round((ev.clientX-r.left)/r.width*(n+h))-h));
       xh.setAttribute('x1',X(k));xh.setAttribute('x2',X(k));xh.setAttribute('visibility','visible');
+      if(k<0){
+        var x=hp[k+h];
+        ui.showTip('<div class="tt-h">'+esc(x.name)+' payday<span>SAVED</span></div><dl class="tt-g"><dt><i class="sw ln hist"></i>Pay myself balance</dt><dd>'+esc(fmt(x.bal))+'</dd>'+(x.delta!=null?'<dt>Change from cycle before</dt><dd>'+(x.delta>=0?'+':'\u2212')+esc(fmt(Math.abs(x.delta)))+'</dd>':'')+'</dl>',ev.clientX,ev.clientY);
+        return;
+      }
       var b=m.bands[k],ab=a.bands[k];
-      var h='<div class="tt-h">'+(k===0?'Now':esc(R.cycles[k-1].label+' '+new Date(R.cycles[k-1].start*DAY).getUTCFullYear()+' cycle'))+'<span>'+(k?'CYCLE '+k:'TODAY')+'</span></div><dl class="tt-g">'+
+      var tt='<div class="tt-h">'+(k===0?'Now':esc(R.cycles[k-1].label+' '+new Date(R.cycles[k-1].start*DAY).getUTCFullYear()+' cycle'))+'<span>'+(k?'CYCLE '+k:'TODAY')+'</span></div><dl class="tt-g">'+
         '<dt><i class="sw ln cum"></i>Typical</dt><dd>'+esc(fmt(b.p50))+'</dd><dt>Likely range</dt><dd>'+esc(K(b.p25)+' – '+K(b.p75))+'</dd><dt>80% range</dt><dd>'+esc(K(b.p10)+' – '+K(b.p90))+'</dd>'+
         '<dt><i class="sw ln prev"></i>'+esc(SCEN[R.altName].label)+'</dt><dd>'+esc(fmt(ab.p50))+'</dd>'+
         (k&&R.planned[k-1]?'<dt>Planned that cycle</dt><dd>'+esc(fmt(R.planned[k-1]))+'</dd>':'')+'</dl>';
-      ui.showTip(h,ev.clientX,ev.clientY);
+      ui.showTip(tt,ev.clientX,ev.clientY);
     }
     hit.addEventListener('pointermove',at);hit.addEventListener('pointerdown',at);
     hit.addEventListener('pointerleave',function(){xh.setAttribute('visibility','hidden');ui.hideTip();});
@@ -428,7 +471,7 @@ var Forecast=(function(){
   function drawWater(){
     var el=$('#fc-water');if(!el) return;
     var p=R.main.parts,f=R.fixed;
-    var steps=[['Pay',R.inc,'c1',1],['Mama',-f.family,'c4'],['Touheed',-f.touheed,'c2'],['Bills',-f.bills,'c3'],['Food',-p[0],'c1'],['Getting around',-p[1],'c2'],['Personal',-p[2],'c5'],['One-offs',-p[3],'c7']];
+    var steps=[['Pay',R.inc,'c1',1],['Mama',-f.family,'c4'],['Touheed',-(f.touheed-R.adv),'c2'],['Bills',-f.bills,'c3'],['Food',-p[0],'c1'],['Getting around',-p[1],'c2'],['Personal',-p[2],'c5'],['One-offs',-p[3],'c7']];
     if(f.other) steps.push(['Other fixed',-f.other,'cn']);
     if(R.planned[0]) steps.push(['Planned',-R.planned[0],'c8']);
     var save=steps.reduce(function(s,x){return s+x[1];},0);
@@ -476,13 +519,14 @@ var Forecast=(function(){
     var up=plan.upcoming.length?plan.upcoming:[];
     b.innerHTML='<div class="pf-sec">Income</div><div class="pf-g">'+
       num('pl-min','Minimum pay',plan.minPay,'Your guaranteed pay. Update it when you get a raise.')+
-      num('pl-extra','Usual extra pay',plan.extra,'Typical overtime and attendance bonus per cycle. Leave 0 to plan on the minimum only.')+'</div>'+
+      num('pl-extra','Usual extra pay',plan.extra,'Overtime and attendance bonus you can count on per cycle. Past high-overtime months may not repeat, so keep this conservative, or 0 to plan on the minimum only.')+'</div>'+
       '<div class="pf-sec">Fixed every cycle</div><div class="pf-g">'+
       num('pl-fam','Family support (Mama)',plan.family!=null&&isFinite(plan.family)?plan.family:35000,'')+
-      num('pl-tou','Touheed: transport + advances',plan.touheed,'Suggested <button type="button" class="lnk" data-sug="pl-tou" data-v="'+R.sug.touheed+'">'+esc(fmt(R.sug.touheed))+'</button> from your last four cycles, loans netted.',R.sug.touheed)+
+      num('pl-tou','Touheed transport fee',plan.touheed!=null&&isFinite(plan.touheed)?plan.touheed:R.sug.touheed,'His fee for a month of rides. Change it when he changes it.')+
+      num('pl-adv','Already advanced to Touheed',plan.touheedAdvance,'Loans he took against next month\u2019s fee. Comes off the next cycle only: 10,000 advanced on a 27,000 fee means 17,000 next cycle.')+
       num('pl-oth','Other fixed costs',plan.otherFixed,'Anything else every cycle that is not in the sheet yet.')+'</div>'+
       '<div class="pf-sec">Savings</div><div class="pf-g">'+
-      num('pl-bal','Savings balance today',plan.balance,'Suggested <button type="button" class="lnk" data-sug="pl-bal" data-v="'+Math.round(R.sug.balance)+'">'+esc(fmt(R.sug.balance))+'</button>: all your Pay myself rows.',R.sug.balance)+
+      num('pl-bal','Savings balance today',plan.balance,'Suggested <button type="button" class="lnk" data-sug="pl-bal" data-v="'+Math.round(R.sug.balance)+'">'+esc(fmt(R.sug.balance))+'</button>: your latest Pay myself row.',R.sug.balance)+
       num('pl-goal','Savings goal',plan.goal,'')+
       '<label class="pf"><span>Goal date</span><span class="pf-in"><input id="pl-gd" type="date" value="'+esc(plan.goalDate||'')+'"></span></label></div>'+
       '<div class="pf-sec" id="pl-up-h">Upcoming expenses</div><div id="pl-up">'+up.map(function(u){return upRow(u,opt);}).join('')+'</div>'+
@@ -499,7 +543,7 @@ var Forecast=(function(){
   }
   function readPlanForm(){
     function n(id){var v=$('#'+id).value.trim();if(v==='') return '';var x=Logic.num(v);return isNaN(x)?'':x;}
-    var p={minPay:n('pl-min'),extra:n('pl-extra'),family:n('pl-fam'),touheed:n('pl-tou'),otherFixed:n('pl-oth'),balance:n('pl-bal'),goal:n('pl-goal'),goalDate:$('#pl-gd').value,upcoming:[]};
+    var p={minPay:n('pl-min'),extra:n('pl-extra'),family:n('pl-fam'),touheed:n('pl-tou'),touheedAdvance:n('pl-adv'),otherFixed:n('pl-oth'),balance:n('pl-bal'),goal:n('pl-goal'),goalDate:$('#pl-gd').value,upcoming:[]};
     $$('#pl-up .up-row').forEach(function(r){
       var amt=Logic.num($('.up-amt',r).value),item=$('.up-item',r).value.trim();
       if(!isNaN(amt)&&amt>0) p.upcoming.push({month:$('select',r).value,item:item||'Expense',amount:amt});

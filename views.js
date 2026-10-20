@@ -176,7 +176,13 @@
       var tot=M.bal.total!=null?M.bal.total:0,off=M.bal.offset;
       k.push(kpi('Liquid',esc(fmt(tot)),off==null?'ABL + Sadapay + Cash':Math.abs(off)<1?'<span class="ok">✓ Reconciled</span>':'<span class="bad">! Off by '+esc(fmt(Math.abs(off)))+'</span>'));
     }
-    k.push(kpi('Saved',esc(fmt(A.saved)),M.inc&&!isNaN(M.inc.income)?'Payout '+esc(fmt(M.inc.income)):'Pay myself rows'));
+    // Pay myself is the running savings balance; growth from the previous period is what was saved.
+    var sv=A.saved;
+    if(sv>0){
+      var pv=0;for(var j=M.i-1;j>=0;j--) if(M.aggs[j].saved>0){pv=M.aggs[j].saved;break;}
+      var g=pv?sv-pv:null;
+      k.push(kpi('Savings',esc(fmt(sv)),g==null?'Pay myself balance':g>0?'<span class="ok">\u25b2 +'+esc(fmt(g))+'</span> since last payday':g<0?'<span class="bad">\u25bc '+esc(fmt(-g))+'</span> since last payday':'Same as last payday'));
+    }else k.push(kpi('Savings','\u2013','No Pay myself row in this '+M.unit));
     k.push(kpi('Activity',String(A.count)+'<small> entries</small>',esc(fmt(A.spent/Math.max(1,A.dayCount)))+' / day avg'));
 
     var sig=signals();

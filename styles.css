@@ -738,3 +738,22 @@ body.gated .ctx,body.gated .tabs{display:none}
 .up-row select,.up-row .up-item{min-width:0;height:38px;background:var(--raise);border:1px solid var(--line-2);border-radius:var(--r);color:var(--ink);padding:0 8px;font:13px var(--font-ui);color-scheme:dark}
 .up-row .pf-in input{padding:8px 0;font-size:13.5px}
 @media (max-width:560px){.up-row{grid-template-columns:1fr 1fr 28px}.up-row .up-item{grid-column:1/3;grid-row:2}.up-row .x{grid-row:1/3;grid-column:3}.up-row .pf-in{grid-row:1;grid-column:2}}
+
+.past{fill:rgba(255,255,255,.02)}
+.hist{fill:none;stroke:var(--ink-2);stroke-width:2;stroke-linejoin:round}
+.hist-d{fill:var(--panel);stroke:var(--ink-2);stroke-width:2}
+.sw.ln.hist{background:var(--ink-2)}
+.now{stroke:var(--axis);stroke-width:1}
+.now-t{fill:var(--muted);font:600 9px var(--font-num);letter-spacing:.1em}
+.past-t{fill:var(--ink-2)}
+.sv-bars{display:flex;gap:8px;padding-top:4px}
+.sv-c{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0}
+.sv-c b{font:600 11px var(--font-num);color:var(--ink);white-space:nowrap}
+.sv-t{position:relative;width:100%;height:110px;display:flex;align-items:flex-end;justify-content:center;border-bottom:1px solid var(--axis)}
+.sv-t i{display:block;width:100%;max-width:40px;background:var(--good);border-radius:3px 3px 0 0}
+.sv-t i.zero{background:var(--axis)}
+.sv-t i.neg{background:var(--critical)}
+.sv-t i.open{opacity:.55}
+.sv-t em{position:absolute;left:-4px;right:-4px;border-top:1.5px dashed var(--accent)}
+.sv-c span{font:10.5px var(--font-num);color:var(--muted)}
+.sw.sv-g{background:var(--good)}.sw.ln.sv-f{background:var(--accent)}
