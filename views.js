@@ -115,7 +115,7 @@
     if(st==='signedout') return '<div class="gate"><div class="gate-card"><div class="gate-mark">'+LOGO+'</div><h1>Ledger workspace</h1>'+
       '<p>Sign in with the Google account that owns your Monthly Expense Tracking sheet. Google will ask to let this page see and edit your spreadsheets, so you can log entries and update balances here.</p>'+
       '<button type="button" class="btn primary" data-act="signin">Sign in with Google</button>'+
-      (L.isApp()?'':'<a class="gate-apk" href="ledger.apk">Get the Android app ↓</a>')+'</div></div>';
+      '</div></div>';
     return '<div class="gate"><div class="gate-card loading"><div class="gate-mark">'+LOGO+'</div><h1>Opening workspace</h1><p>Reading your Tracking sheet…</p><div class="scan"></div></div></div>';
   }
   var LOGO='<svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path d="M4 18h16" class="lg-a"/><path d="M6 15l4-5 3 3 5-7" class="lg-b"/><circle cx="18" cy="6" r="1.8" class="lg-c"/></svg>';
@@ -746,7 +746,7 @@
       {g:'Action',t:'Refresh',s:'Read the sheet again',run:function(){L.refresh(true);}},
       {g:'Action',t:'Open the Google Sheet',s:'In a new tab',run:function(){window.open(L.sheetUrl(),'_blank','noopener');}},
       {g:'Action',t:'Sign out',s:'Revoke access and clear the saved copy',run:function(){L.signOut();}}
-    ].concat(L.isApp()?[]:[{g:'Action',t:'Get the Android app',s:'Download Ledger.apk',run:function(){location.href='ledger.apk';}}]).concat([
+    ].concat([
     ]);
     acts.forEach(function(a){if(!q||(a.t+' '+a.s).toLowerCase().indexOf(q)>=0) out.push(a);});
     if(M&&!M.empty){

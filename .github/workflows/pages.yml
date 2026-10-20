@@ -15,31 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  android:
-    name: Build Android app
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
-      - name: Build signed APK
-        working-directory: android
-        run: ./gradlew --no-daemon assembleRelease
-      - name: Collect APK
-        run: cp android/app/build/outputs/apk/release/app-release.apk ledger.apk
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ledger-apk
-          path: ledger.apk
-          retention-days: 30
-
   deploy:
-    needs: android
-    # Publish the site even if the Android build failed.
-    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -57,12 +33,6 @@ jobs:
           v="${GITHUB_SHA::7}"
           sed -i -E "s#(href|src)=\"(styles\.css|config\.js|logic\.js|app\.js|editor\.js|viz\.js|views\.js|forecast\.js)\"#\1=\"\2?v=$v\"#g" _site/index.html
           grep -c "?v=$v" _site/index.html
-      - name: Add the APK
-        uses: actions/download-artifact@v4
-        continue-on-error: true
-        with:
-          name: ledger-apk
-          path: _site
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

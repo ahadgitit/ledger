@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="appName">Ledger</string>
-    <string name="launchUrl">https://ahadgitit.github.io/ledger/?source=twa</string>
-    <string name="assetStatements" translatable="false">
-        [{ \"relation\": [\"delegate_permission/common.handle_all_urls\"],
-           \"target\": {\"namespace\": \"web\", \"site\": \"https://ahadgitit.github.io\"}}]
-    </string>
-</resources>

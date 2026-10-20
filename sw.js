@@ -1,5 +1,5 @@
 /* Network first, cache as a fallback so the workspace shell opens offline.
-   Only same-origin GETs are touched; Google APIs and the APK pass straight through. */
+   Only same-origin GETs are touched; Google APIs pass straight through. */
 var CACHE='ledger-shell-v1';
 self.addEventListener('install',function(){self.skipWaiting();});
 self.addEventListener('activate',function(e){
@@ -9,7 +9,7 @@ self.addEventListener('activate',function(e){
 });
 self.addEventListener('fetch',function(e){
   var u=new URL(e.request.url);
-  if(e.request.method!=='GET'||u.origin!==self.location.origin||/\.apk$/.test(u.pathname)) return;
+  if(e.request.method!=='GET'||u.origin!==self.location.origin) return;
   e.respondWith(fetch(e.request).then(function(r){
     if(r.ok){var c=r.clone();caches.open(CACHE).then(function(ca){ca.put(e.request,c);});}
     return r;
