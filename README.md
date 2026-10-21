@@ -35,6 +35,12 @@ Pages at **https://ahadgitit.github.io/ledger/**.
 - The **Accounts** card shows ABL, Sadapay and Cash and compares what your accounts hold
   with what your entries say. The difference is the sheet's offset (`(Total - savings) - Remaining`).
   It shows **In sync** when they match and flags the gap when they don't.
+- **New pay cycle** (button in the top bar, command palette, or the card the Forecast tab shows late in a cycle) starts the next month from the app on payday:
+  - writes the month heading, the column headers and the Pay myself row (and optionally Mama's groceries) after the last month, below its column G block;
+  - builds the column G block (Spent, month start, Remaining, ABL, Sadapay, Cash, Total, Total − savings, offset) with the usual formulas, and copies the last month's formatting;
+  - month start is your balances after the salary; the account you pay Mama from is lowered by that amount, so the offset starts at 0;
+  - closes the previous month's Spent formula at its last row, so it no longer counts the new month;
+  - records the salary in the Income tab. **Undo** removes the new month and puts the old formula back.
 - **Balances** edits the ABL, Sadapay and Cash figures for any month. These are the cells
   under those labels in the month's column G block. Only those cells change, so Total and
   Remaining keep their formulas. **Undo** puts back exactly what was there, formulas included.

@@ -742,6 +742,7 @@
       {g:'Go to',t:'Explorer',s:'Every transaction and item',run:function(){go('explorer');}},
       {g:'Go to',t:'Forecast',s:'This month\u2019s budget and where Pay myself is heading',run:function(){go('forecast');}},
       {g:'Action',t:'Log entry',s:'Add a row to the sheet',run:function(){$('#add').click();}},
+      {g:'Action',t:'Start a new pay cycle',s:'Got paid? Add the new month to the sheet',run:function(){$('#cyc').click();}},
       {g:'Action',t:'Update balances',s:'ABL, Sadapay, Cash',run:function(){$('#bal').click();}},
       {g:'Action',t:'Refresh',s:'Read the sheet again',run:function(){L.refresh(true);}},
       {g:'Action',t:'Open the Google Sheet',s:'In a new tab',run:function(){window.open(L.sheetUrl(),'_blank','noopener');}},

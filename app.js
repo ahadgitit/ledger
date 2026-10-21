@@ -208,6 +208,9 @@
     put:function(range,values){return api('/values/'+encodeURIComponent(range)+'?valueInputOption=RAW',{method:'PUT',body:{range:range,majorDimension:'ROWS',values:values}});},
     batch:function(data,input){return api('/values:batchUpdate',{method:'POST',body:{valueInputOption:input||'RAW',data:data}});},
     clear:function(range){return api('/values/'+encodeURIComponent(range)+':clear',{method:'POST',body:{}});},
+    // tab ids and structural requests (formatting a new month like the last one)
+    tabs:function(){return api('?fields='+encodeURIComponent('sheets.properties(sheetId,title)')).then(function(j){return (j.sheets||[]).map(function(x){return x.properties;});});},
+    sheetBatch:function(requests){return api(':batchUpdate',{method:'POST',body:{requests:requests}});},
     refresh:function(manual){retried=false;return load(!!manual);},
     // Write one month's pay to the Income tab, creating the tab the first time.
     saveIncome:function(y,m,received){

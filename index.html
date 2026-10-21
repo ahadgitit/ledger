@@ -32,6 +32,7 @@
   <div class="sync off" id="sync" title="Sheet sync"><i></i><span id="sync-t">OFFLINE</span><time id="sync-time">&ndash;</time></div>
   <div class="actions">
     <button type="button" class="btn primary" id="add" hidden><span aria-hidden="true">+</span> Log entry</button>
+    <button type="button" class="btn" id="cyc" hidden>New pay cycle</button>
     <button type="button" class="btn" id="bal" hidden>Update balances</button>
     <button type="button" class="btn icon" id="refresh" hidden aria-label="Refresh from the sheet" title="Refresh">&#8635;</button>
     <button type="button" class="btn primary" id="signin" hidden>Sign in</button>
@@ -90,6 +91,17 @@
     <footer class="sheet-f">
       <span class="hint-line" id="bal-hint"></span>
       <button type="button" class="btn primary" id="bal-save" disabled>Save balances</button>
+    </footer>
+  </div>
+</dialog>
+
+<dialog class="sheet" id="cyc-dlg" aria-labelledby="cyc-title">
+  <div class="sheet-in">
+    <header class="sheet-h"><h2 id="cyc-title"><span class="dlg-k">PAYDAY</span>Start a new pay cycle</h2><button type="button" class="x" data-close aria-label="Close">&times;</button></header>
+    <div class="sheet-b" id="cyc-body"></div>
+    <footer class="sheet-f">
+      <span class="hint-line" id="cyc-hint"></span>
+      <button type="button" class="btn primary" id="cyc-save" disabled>Start pay cycle</button>
     </footer>
   </div>
 </dialog>

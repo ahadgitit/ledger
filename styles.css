@@ -502,7 +502,7 @@ dialog.cmd::backdrop{background:rgba(10,12,15,.6);backdrop-filter:blur(2px)}
   .topbar{gap:8px;height:52px;padding-top:env(safe-area-inset-top,0px);height:calc(52px + env(safe-area-inset-top,0px))}
   .brand span{font-size:12.5px}
   .sync time{display:none}
-  .actions #bal,.actions #signout{display:none}
+  .actions #bal,.actions #cyc,.actions #signout{display:none}
   .tabs{position:fixed;z-index:30;left:0;right:0;bottom:0;margin:0;height:calc(var(--nav) + env(safe-area-inset-bottom,0px));padding:0 0 env(safe-area-inset-bottom,0px);background:rgba(20,24,29,.97);backdrop-filter:blur(10px);border-top:1px solid var(--line);align-self:auto}
   .tabs a{flex:1;flex-direction:column;justify-content:center;gap:3px;padding:0;border-bottom:0;border-top:2px solid transparent;margin:0;font-size:11px;letter-spacing:.02em}
   .tabs a[aria-current="page"]{border-top-color:var(--accent);background:linear-gradient(180deg,var(--accent-bg),transparent 80%)}
@@ -761,6 +761,17 @@ body.gated .ctx,body.gated .tabs{display:none}
 .fp-capd{grid-column:1/-1;margin:0;font:12px var(--font-num);color:var(--ink-2)}
 .fp-capd:empty{display:none}
 .fp-use{height:38px}
+/* new pay cycle */
+.cyc-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end}
+#cyc-dlg select.inline{font:13.5px var(--font-ui);color:var(--ink);background:var(--raise);border:1px solid var(--line-2);border-radius:var(--r);padding:8px 10px;width:100%;color-scheme:dark}
+#cyc-dlg input.inline{width:100%;flex:none;font-size:13.5px;padding:8px 10px}
+#cyc-dlg #c-pm,#cyc-dlg [data-c-acc],#cyc-dlg #c-mama-amt{font-family:var(--font-num);text-align:right}
+.cyc-accs{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+.cyc-acc{gap:5px}.cyc-acc small,.cyc-sub{font-size:11px;color:var(--muted)}
+.cyc-chk{display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--ink-2);line-height:1.45}
+.cyc-chk input{width:16px;height:16px;margin:1px 0 0;accent-color:var(--accent);flex:0 0 auto}
+.cyc-sum{border:1px solid var(--line);border-radius:var(--r);background:var(--raise);padding:10px 12px;font-size:12px;color:var(--ink-2)}
+.cyc-sum b{color:var(--ink);font-size:12px}.cyc-sum ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}.cyc-sum i{font-style:normal;color:var(--ink)}
 /* money in, out and saved */
 .cf-ask .pnl-b{display:flex;align-items:center;justify-content:space-between;gap:12px 20px;flex-wrap:wrap;border-left:3px solid var(--accent);background:linear-gradient(90deg,var(--accent-bg),transparent 70%)}
 .cf-ask-t{display:grid;gap:3px}.cf-ask-t b{font-size:14px;color:var(--ink)}.cf-ask-t span{font-size:12.5px;color:var(--ink-2)}

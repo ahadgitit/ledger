@@ -177,7 +177,7 @@ var Forecast=(function(){
   function view(M,ui){
     ui0=ui;
     R=model(M);
-    if(R.msg) return '<section class="pnl"><div class="pnl-b"><div class="empty">'+esc(R.msg)+'</div></div></section>';
+    if(R.msg) return '<section class="pnl"><div class="pnl-b"><div class="empty">'+esc(R.msg)+(/payday has passed/i.test(R.msg)?'<p><button type="button" class="btn primary" data-open-cycle>Start the new pay cycle</button></p>':'')+'</div></div></section>';
     var I=inputs(R),until=fmtDay(R.lastDay),foodMode=I.mode==='food',d=R.days;
     var usualFood=r100(R.usual.food*d),usualShop=r100(R.usual.shop*d);
     var bills=R.bills.map(function(b){
@@ -216,7 +216,7 @@ var Forecast=(function(){
         '<p class="fp-capd" data-capd="'+which+'"></p></div>';
     };
     var result=function(which){return '<div class="fp-pred"><span class="lbl">Predicted '+(which==='food'?'food':'shopping')+' budget</span><b id="fp-pred"></b><small id="fp-pred-d"></small></div>';};
-    return '<div class="plan" id="fp">'+cfPrompt()+
+    return '<div class="plan" id="fp">'+cycAsk(M)+cfPrompt()+
       '<section class="pnl m-hero fp-hero" id="fp-hero"><div class="pnl-b">'+
         '<div class="fp-top"><div class="m-q">Can your Pay myself of <b>'+esc(fmt(R.saved))+'</b> stay untouched until '+esc(until)+'?</div>'+
           '<div class="fp-mode"><span class="lbl">Predict</span><div class="seg" role="group" aria-label="What to predict"><button type="button" data-pmode="food" aria-pressed="'+foodMode+'">Food</button><button type="button" data-pmode="shop" aria-pressed="'+!foodMode+'">Shopping</button></div></div></div>'+
@@ -494,6 +494,13 @@ var Forecast=(function(){
   }
 
   var CF=null;
+  // late in a cycle, offer to start the next one from here
+  function cycAsk(M){
+    if(M.today-R.cur.start<24) return '';
+    var i=FULLMON.map(function(m){return m.toLowerCase();}).indexOf(String(R.cur.name).toLowerCase()),next=i<0?'the next':FULLMON[(i+1)%12];
+    return '<section class="pnl cf-ask"><div class="pnl-b"><div class="cf-ask-t"><b>Got paid? Start '+esc(next)+'’s pay cycle</b><span>Adds the new month to the sheet with your Pay myself and balances, records the salary, and closes '+esc(R.cur.name)+'’s totals.</span></div>'+
+      '<button type="button" class="btn primary sm" data-open-cycle>Start '+esc(next)+'</button></div></section>';
+  }
   function cfPrompt(){
     var k=ymKey(R.cur.start),i=(L.S.income||{})[k];
     if(i&&i.received!=null) return '';

@@ -407,6 +407,163 @@
   }
 
   // True when the person has already put the cursor in a field of this dialog.
+
+  // =====================================================================
+  // New pay cycle: the next month's heading, its column G block, the Pay myself row,
+  // optionally Mama's groceries, the pay in the Income tab, and the previous month's
+  // Spent formula closed at its last row so it stops counting the new month.
+  // =====================================================================
+  var MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var C=null,cycSaving=false;
+  // 1-based rows of the latest month: heading, last entry, and the last cell it uses in A:G
+  function lastMonth(rows){
+    var hs=headings(rows);if(!hs.length) return null;
+    var h=hs[hs.length-1],lastA=h+1,lastG=h,pm=0;
+    for(var i=h+1;i<rows.length;i++){
+      if(filled(rows[i])){lastA=i;if(cell(rows[i],5).toLowerCase()==='savings') pm+=numOr0(cell(rows[i],1));}
+      if(cell(rows[i],6)) lastG=i;
+    }
+    var bl=blocks(rows).filter(function(b){return b.head===h+1;})[0];
+    return {name:cell(rows[h],0),head:h+1,lastEntry:lastA+1,end:Math.max(lastA,lastG)+1,acc:bl?bl.acc:{},order:bl?bl.order:[],pm:pm};
+  }
+  function mamaFee(){try{var s=JSON.parse(localStorage.getItem('ledger.forecast.v3')||'{}');return s.fees&&s.fees.mama!=null?s.fees.mama:35000;}catch(e){return 35000;}}
+  function cycYear(){var y=+C.date.slice(0,4),m=+C.date.slice(5,7),mi=MONTHS.indexOf(C.month);return mi===0&&m===12?y+1:mi===11&&m===1?y-1:y;}
+  function cnum(s){var n=Logic.num(s);return isNaN(n)?NaN:Math.abs(n);}
+  function openCycle(){
+    var rows=L.S.tracking||[],lm=lastMonth(rows);
+    if(!lm){toast('No month heading found in column A of the Tracking tab.');return;}
+    var mi=MONTHS.map(function(m){return m.toLowerCase();}).indexOf(lm.name.toLowerCase());
+    var next=mi<0?MONTHS[+karachi(0).slice(5,7)-1]:MONTHS[(mi+1)%12];
+    var acc={};['ABL','Sadapay','Cash'].concat(lm.order.filter(function(k){return ['ABL','Sadapay','Cash'].indexOf(k)<0;})).forEach(function(k){acc[k]=lm.acc[k]?lm.acc[k].value:0;});
+    C={month:next,date:karachi(0),salary:'',pm:lm.pm?String(lm.pm):'',prev:acc,acc:{},touched:{},mama:true,mamaAmt:String(mamaFee()),mamaMode:'Sadapay',close:true,lm:lm};
+    var inc=(L.S.income||{})[cycYear()+'-'+('0'+(MONTHS.indexOf(next)+1)).slice(-2)];
+    if(inc&&inc.received) C.salary=String(Math.round(inc.received));
+    drawCycle();
+    var d=$('#cyc-dlg');if(!d.open) d.showModal();
+    setTimeout(function(){var f=$('#c-salary');if(f&&!userFocused('#cyc-dlg')) f.focus();},30);
+  }
+  // balances after the salary: the salary lands in ABL unless you change it
+  function accAfter(k){
+    if(C.touched[k]) return cnum(C.acc[k]);
+    var v=C.prev[k]||0,s=cnum(C.salary);
+    return k==='ABL'&&s>0?v+s:v;
+  }
+  function cycProblems(){
+    var p=[];
+    if(!(cnum(C.salary)>0)) p.push('Enter the salary you received.');
+    if(isNaN(cnum(C.pm))) p.push('Enter your Pay myself total.');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(C.date)) p.push('Pick the payday date.');
+    Object.keys(C.prev).forEach(function(k){if(isNaN(accAfter(k))) p.push('Check the '+k+' balance.');});
+    if(C.mama&&!(cnum(C.mamaAmt)>0)) p.push('Enter the amount for Mama, or untick it.');
+    else if(C.mama&&accAfter(C.mamaMode)-cnum(C.mamaAmt)<0) p.push(C.mamaMode+' would go below zero after Mama\u2019s '+group(cnum(C.mamaAmt))+'. Put its balance after the salary, or pay from another account.');
+    if(C.month.toLowerCase()===C.lm.name.toLowerCase()) p.push(C.month+' is already the latest month in the sheet.');
+    return p;
+  }
+  function drawCycle(){
+    var lm=C.lm,monthOpts=MONTHS.map(function(m){return '<option'+(m===C.month?' selected':'')+'>'+m+'</option>';}).join('');
+    var accs=Object.keys(C.prev).map(function(k){
+      var v=accAfter(k);
+      return '<label class="fld cyc-acc"><span class="lbl">'+esc(k)+'</span><input class="inline" inputmode="numeric" data-c-acc="'+esc(k)+'" value="'+(isNaN(v)?esc(C.acc[k]||''):esc(group(v)))+'"><small>was '+esc(fmt(C.prev[k]||0))+(k==='ABL'&&!C.touched.ABL?' + salary':'')+'</small></label>';
+    }).join('');
+    $('#cyc-body').innerHTML=
+      '<div class="cyc-row"><label class="fld"><span class="lbl">New month</span><select class="inline" id="c-month">'+monthOpts+'</select></label>'+
+        '<label class="fld"><span class="lbl">Payday</span><input type="date" class="inline" id="c-date" value="'+esc(C.date)+'"></label></div>'+
+      '<label class="fld"><span class="lbl">Salary received</span><div class="amt"><span>Rs</span><input id="c-salary" inputmode="decimal" autocomplete="off" placeholder="0" value="'+esc(C.salary)+'"></div></label>'+
+      '<label class="fld"><span class="lbl">Pay myself, your total savings now</span><input class="inline" id="c-pm" inputmode="numeric" value="'+esc(C.pm?group(cnum(C.pm)):'')+'"><small class="cyc-sub" id="c-pm-d"></small></label>'+
+      '<div class="fld"><span class="lbl">Balances after the salary arrived</span><div class="cyc-accs">'+accs+'</div></div>'+
+      '<div class="fld"><label class="cyc-chk"><input type="checkbox" id="c-mama"'+(C.mama?' checked':'')+'> Also log Mama’s groceries</label>'+
+        (C.mama?'<div class="cyc-row"><input class="inline" id="c-mama-amt" inputmode="numeric" value="'+esc(group(cnum(C.mamaAmt)||0))+'"><div class="picks">'+MODES.map(function(m){return '<button type="button" class="pick" data-c-mode="'+m+'" aria-pressed="'+(C.mamaMode===m)+'">'+m+'</button>';}).join('')+'</div></div>':'')+'</div>'+
+      '<label class="cyc-chk"><input type="checkbox" id="c-close"'+(C.close?' checked':'')+'> Close '+esc(lm.name)+'’s Spent formula at its last row ('+lm.lastEntry+'), so it stops counting the new month</label>'+
+      '<div class="cyc-sum" id="c-sum"></div>';
+    drawCycleSum();
+  }
+  function drawCycleSum(){
+    var lm=C.lm,H=lm.end+1,sal=cnum(C.salary),pm=cnum(C.pm),prevPM=lm.pm,start=0,mama=C.mama?cnum(C.mamaAmt):0;
+    Object.keys(C.prev).forEach(function(k){start+=accAfter(k)||0;});
+    var d=$('#c-pm-d');
+    if(d) d.textContent=isNaN(pm)?'':pm===prevPM?'Same as '+lm.name+' ('+fmt(prevPM)+'): nothing new saved yet.':pm>prevPM?'Up '+fmt(pm-prevPM)+' from '+lm.name+'’s '+fmt(prevPM)+'.':'Down '+fmt(prevPM-pm)+' from '+lm.name+'’s '+fmt(prevPM)+'.';
+    var li=function(t){return '<li>'+t+'</li>';};
+    $('#c-sum').innerHTML='<b>What will be written</b><ul>'+
+      li('Tracking rows '+H+'–'+(H+(C.mama?3:2))+': <i>'+esc(C.month)+'</i> heading, Pay myself '+(isNaN(pm)?'–':esc(fmt(pm)))+(C.mama&&mama>0?', groceries to mama '+esc(fmt(mama))+' ('+esc(C.mamaMode)+')':''))+
+      li('Column G: month start '+esc(fmt(start))+', Remaining formula, balances'+(C.mama&&mama>0?' ('+esc(C.mamaMode)+' after Mama: '+esc(fmt((accAfter(C.mamaMode)||0)-mama))+')':''))+
+      (C.close?li(esc(lm.name)+'’s Spent formula: rows '+(lm.head+2)+'–'+lm.lastEntry):'')+
+      li('Income tab: '+esc(C.month)+' '+cycYear()+' received '+(sal>0?esc(fmt(sal)):'–'))+'</ul>';
+    var p=cycProblems();
+    $('#cyc-hint').textContent=p[0]||'';$('#cyc-hint').classList.toggle('bad',!!p.length&&sal>0);
+    $('#cyc-save').disabled=!!p.length||cycSaving;
+  }
+  function saveCycle(){
+    if(cycSaving||cycProblems().length) return;
+    cycSaving=true;setBusy('#cyc-save',true,'Starting…');
+    var sal=cnum(C.salary),pm=cnum(C.pm),mama=C.mama?cnum(C.mamaAmt):0,date=toSheetDate(C.date),month=C.month,year=cycYear();
+    var lm,H,oldF=null,closed=false,accVals={};
+    Object.keys(C.prev).forEach(function(k){accVals[k]=accAfter(k);});
+    var start=Object.keys(accVals).reduce(function(a,k){return a+accVals[k];},0);
+    if(mama>0) accVals[C.mamaMode]=(accVals[C.mamaMode]||0)-mama;
+    needToken().then(function(){
+      // read the sheet fresh: the new month goes after whatever is there now
+      return L.get('Tracking!A1:G5000');
+    }).then(function(rows){
+      lm=lastMonth(rows);
+      if(!lm) throw Object.assign(new Error('No month heading found in column A of the Tracking tab.'),{code:'layout'});
+      if(lm.name.toLowerCase()===month.toLowerCase()) throw Object.assign(new Error(month+' is already in the sheet.'),{code:'layout'});
+      H=lm.end+1;
+      for(var i=H-1;i<H+22;i++) if((rows[i]||[]).some(function(x){return String(x==null?'':x).trim()!=='';})) throw Object.assign(new Error('Row '+(i+1)+' is not empty, so the new month was not added.'),{code:'layout'});
+      if(!C.close) return;
+      // only close a Spent formula that looks like the usual one
+      return L.get('Tracking!G'+(lm.head+2)+':G'+(lm.head+3),'FORMULA').then(function(f){
+        var lab=String((f[0]||[])[0]||'').trim().toLowerCase(),v=String((f[1]||[])[0]||'');
+        if(lab==='spent'&&/^=SUM\(B\d+:B\d+\)$/i.test(v)) oldF=v;
+      });
+    }).then(function(){
+      // the new month looks like the last one: copy its formatting first
+      return L.tabs().then(function(t){
+        var tr=t.filter(function(x){return x.title==='Tracking';})[0];if(!tr) return;
+        var src={sheetId:tr.sheetId,startRowIndex:lm.head-1,endRowIndex:lm.head+22,startColumnIndex:0,endColumnIndex:7};
+        return L.sheetBatch([{copyPaste:{source:src,destination:{sheetId:tr.sheetId,startRowIndex:H-1,endRowIndex:H+22,startColumnIndex:0,endColumnIndex:7},pasteType:'PASTE_FORMAT'}}]);
+      }).catch(function(){});
+    }).then(function(){
+      var g=function(r,v){return {range:'Tracking!G'+r,values:[[v]]};};
+      var data=[
+        {range:'Tracking!A'+H,values:[[month]]},
+        {range:'Tracking!A'+(H+1)+':G'+(H+1),values:[['Expense','Amount','Description','Date','Payment mode','Category','TOTAL_Dec']]},
+        {range:'Tracking!A'+(H+2)+':F'+(H+2),values:[['Pay myself',pm,'savings',date,'ABL','savings']]},
+        g(H+2,'Spent'),g(H+4,'month start:'),g(H+5,start),g(H+6,'Remaining'),
+        g(H+9,'ABL'),g(H+10,accVals.ABL||0),g(H+11,'Sadapay'),g(H+12,accVals.Sadapay||0),g(H+13,'Cash'),g(H+14,accVals.Cash||0),
+        g(H+15,'at Home'),g(H+16,accVals['At home']||0),g(H+17,'Total'),g(H+19,'Total - savings'),g(H+21,'offset')
+      ];
+      if(mama>0) data.push({range:'Tracking!A'+(H+3)+':F'+(H+3),values:[['groceries',mama,'to mama',date,C.mamaMode,'Family/Home']]});
+      return L.batch(data);
+    }).then(function(){
+      var f=function(r,v){return {range:'Tracking!G'+r,values:[[v]]};};
+      var data=[
+        f(H+3,'=SUM(B'+(H+2)+':B'+(H+400)+')'),f(H+7,'=G'+(H+5)+'-G'+(H+3)),
+        f(H+18,'=SUM(G'+(H+10)+',G'+(H+12)+',G'+(H+14)+',G'+(H+16)+')'),f(H+20,'=(G'+(H+18)+'-B'+(H+2)+')'),f(H+22,'=G'+(H+20)+'-G'+(H+7))
+      ];
+      if(oldF){data.push(f(lm.head+3,'=SUM(B'+(lm.head+2)+':B'+lm.lastEntry+')'));closed=true;}
+      return L.batch(data,'USER_ENTERED');
+    }).then(function(){
+      return L.get('Tracking!A'+H+':A'+(H+2)).then(function(back){
+        if(cell(back[0],0)!==month||cell(back[2],0)!=='Pay myself') throw Object.assign(new Error('The new month was written but did not read back as expected. Check row '+H+' in the sheet.'),{code:'verify'});
+      });
+    }).then(function(){
+      return L.saveIncome(year,MONTHS.indexOf(month)+1,sal).catch(function(){});
+    }).then(function(){
+      cycSaving=false;setBusy('#cyc-save',false,'Start pay cycle');
+      $('#cyc-dlg').close();
+      var h=H,lmH=lm.head,f0=oldF;
+      toast(month+' started at row '+H+(closed?', and '+lm.name+'’s Spent now ends at row '+lm.lastEntry:'')+'.',[{label:'Undo',run:function(){
+        needToken().then(function(){return L.clear('Tracking!A'+h+':G'+(h+22));}).then(function(){
+          return f0?L.batch([{range:'Tracking!G'+(lmH+3),values:[[f0]]}],'USER_ENTERED'):null;
+        }).then(function(){L.refresh();toast(month+' removed. Its pay is still in the Income tab.');}).catch(function(e){toast(fail(e));});
+      }}]);
+      L.refresh();
+    }).catch(function(e){
+      cycSaving=false;setBusy('#cyc-save',false,'Start pay cycle');
+      var hint=$('#cyc-hint');hint.textContent=fail(e);hint.classList.add('bad');
+    });
+  }
+
   function userFocused(sel){var a=document.activeElement;return !!(a&&a.tagName==='INPUT'&&a.closest(sel));}
   function setBusy(sel,on,text){var b=$(sel);if(!b) return;b.disabled=on;b.textContent=text;}
 
@@ -416,9 +573,14 @@
     if(!t) return;
     if(t.id==='add'||t.id==='fab') return openAdd();
     if(t.id==='bal') return openBal();
+    if(t.id==='cyc'||t.hasAttribute('data-open-cycle')) return openCycle();
     if(t.hasAttribute('data-open-bal')) return openBal(t.getAttribute('data-open-bal'),t.getAttribute('data-acct'));
     if(t.matches('[data-close]')){t.closest('dialog').close();return;}
     var inAdd=t.closest('#add-dlg'),inBal=t.closest('#bal-dlg');
+    if(t.closest('#cyc-dlg')){
+      if(t.hasAttribute('data-c-mode')){C.mamaMode=t.getAttribute('data-c-mode');$$('[data-c-mode]').forEach(function(b){b.setAttribute('aria-pressed',String(b===t));});drawCycleSum();return;}
+      if(t.id==='cyc-save') return saveCycle();
+    }
     if(inAdd){
       if(t.hasAttribute('data-dir')){F.dir=t.getAttribute('data-dir');F.touched.dir=true;
         if(F.dir==='in'&&F.cat!=='transfer'){F.cat='influx';}
@@ -452,14 +614,32 @@
     else if(t.id==='f-adjust'){F.adjust=t.checked;drawReceipt();}
     else if(t.id==='f-date'){F.date=t.value;$$('[data-date]').forEach(function(b){b.setAttribute('aria-pressed',String(b.getAttribute('data-date')===F.date));});drawReceipt();}
     else if(t.hasAttribute&&t.hasAttribute('data-acct')){B.vals[t.getAttribute('data-acct')]=t.value;drawBalTotals();}
+    else if(t.closest&&t.closest('#cyc-dlg')&&C){
+      if(t.id==='c-month') C.month=t.value;
+      else if(t.id==='c-date') C.date=t.value;
+      else if(t.id==='c-salary'){C.salary=t.value;var ab=$('[data-c-acc="ABL"]');if(ab&&!C.touched.ABL){var v=accAfter('ABL');ab.value=isNaN(v)?'':group(v);}}
+      else if(t.id==='c-pm') C.pm=t.value;
+      else if(t.hasAttribute('data-c-acc')){var k=t.getAttribute('data-c-acc');C.acc[k]=t.value;C.touched[k]=true;}
+      else if(t.id==='c-mama'){C.mama=t.checked;C.mamaAmt=$('#c-mama-amt')?$('#c-mama-amt').value:C.mamaAmt;drawCycle();return;}
+      else if(t.id==='c-mama-amt') C.mamaAmt=t.value;
+      else if(t.id==='c-close') C.close=t.checked;
+      drawCycleSum();
+    }
+  });
+  // tidy amounts in the pay cycle form once you leave the box
+  document.addEventListener('change',function(e){
+    var t=e.target;
+    if(!(t.closest&&t.closest('#cyc-dlg'))||t.tagName!=='INPUT'||t.type==='checkbox'||t.type==='date') return;
+    var n=cnum(t.value);if(!isNaN(n)&&t.value.trim()) t.value=group(n);
   });
   document.addEventListener('keydown',function(e){
     if(e.key!=='Enter'||e.isComposing) return;
     var t=e.target;
     if(t.closest&&t.closest('#add-dlg')&&t.tagName==='INPUT'){e.preventDefault();saveEntry($('#add-again').checked);}
     else if(t.closest&&t.closest('#bal-dlg')&&t.tagName==='INPUT'){e.preventDefault();saveBal();}
+    else if(t.closest&&t.closest('#cyc-dlg')&&t.tagName==='INPUT'&&t.type!=='checkbox'){e.preventDefault();saveCycle();}
   });
-  ['add-dlg','bal-dlg'].forEach(function(id){
+  ['add-dlg','bal-dlg','cyc-dlg'].forEach(function(id){
     var d=document.getElementById(id);
     // Click on the dimmed backdrop closes the sheet.
     d.addEventListener('click',function(e){if(e.target===d) d.close();});
@@ -470,7 +650,7 @@
     toast:toast,
     sync:function(){
       var st=L.state(),on=(st==='ready'||st==='signedout')&&!!L.S.tracking;
-      $('#add').hidden=!on;$('#bal').hidden=!on;$('#fab').hidden=!on;
+      $('#add').hidden=!on;$('#bal').hidden=!on;$('#cyc').hidden=!on;$('#fab').hidden=!on;
     }
   };
   LedgerEditor.sync();
