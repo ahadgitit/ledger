@@ -681,11 +681,10 @@ var Forecast=(function(){
       mama:fee(PEOPLE[1]),touheed:fee(PEOPLE[0]),
       foodSrc:!food&&I.foodCap!=null?'your cap':'your usual',shopSrc:food&&I.shopCap!=null?'your cap':'your usual'};
   }
-  // what is left of this cycle when it ends: a shortfall comes out of Pay myself
+  // the projection starts from this cycle's Pay myself (less any advance paid from it);
+  // the next payday's salary is then added and that month's expenses taken off
   function startBalance(I,C){
-    var d=R.days,food=I.mode==='food',usualFood=R.usual.food*d,usualShop=R.usual.shop*d;
-    var end=C.left!=null?C.left-(food?usualFood:usualShop):C.base-usualFood-usualShop;
-    return {bal:C.kept+Math.min(0,end),dip:Math.min(0,end)};
+    return {bal:C.kept,dip:0};
   }
   /* Shopping each month: you try to stay under your limit, so most months land
      somewhere between 40% and all of it (more often near the top), and about one
@@ -718,7 +717,8 @@ var Forecast=(function(){
     // toiletries every other month: counted from the last cycle you bought them
     var g=(R.ess.filter(function(e){return e.key==='groom';})[0]||{}).amt||0,gMonth=g*MDAYS/R.days*lv,since=1;
     var grRe=ESS.filter(function(e){return e.k==='groom';})[0].re;
-    if(R.cur.tx.some(function(t){return t.amt>0&&grRe.test((t.name+' '+t.desc).toLowerCase());})) since=0;
+    // this cycle has toiletries if they are logged already or planned in its budget, so the next one skips them
+    if(g>0||R.cur.tx.some(function(t){return t.amt>0&&grRe.test((t.name+' '+t.desc).toLowerCase());})) since=0;
     else for(var hi=R.hist.length-1;hi>=0;hi--){if(R.hist[hi].ess.groom>0){since=R.hist.length-hi;break;}}
     // one realistic shopping figure per month for the table, the same each time you look
     var rt=rng(R.id*17+7);
