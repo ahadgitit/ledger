@@ -109,8 +109,11 @@ var Forecast=(function(){
         months:h.filter(function(x){return x.ess[e.k]>0;}).length};
     });
     (s.essExtra||[]).forEach(function(x,j){ess.push({key:'x'+j,label:x.label||'',extra:true,amt:x.amt||0});});
+    var past=cyc.map(function(c){
+      return {day:c.start,full:c.name,label:c.name.slice(0,3),saved:c.tx.filter(function(t){return t.cat==='savings';}).reduce(function(a,t){return a+t.amt;},0)};
+    }).filter(function(p){return p.saved>0;});
     var prevId=i>0?String(cyc[i-1].start):null;
-    return {cur:cur,id:id,prev:i>0?cyc[i-1]:null,prevAdv:prevId?s.adv[prevId]||null:null,days:days,pay:pay,lastDay:pay-1,
+    return {past:past,cur:cur,id:id,prev:i>0?cyc[i-1]:null,prevAdv:prevId?s.adv[prevId]||null:null,days:days,pay:pay,lastDay:pay-1,
       remaining:cur.bal.remaining,saved:saved,bills:bills,ess:ess,hist:h,lv:rideLevels(h),
       usual:{food:perDay(h,function(x){return x.food;}),shop:perDay(h,function(x){return x.shop;})}};
   }
@@ -476,8 +479,8 @@ var Forecast=(function(){
       '</div>'+
       '<div class="ol-stats" id="ol-stats"></div>'+
       '<div class="ol-chart" id="ol-chart"></div>'+
-      '<div class="legend sm"><span><i class="sw c1"></i>Most likely</span><span><i class="sw ol-bandsw"></i>Likely range (8 in 10 futures)</span><span><i class="sw ol-plansw"></i>Planned expense</span></div>'+
-      '<p class="ol-month" id="ol-month"></p>'+
+      '<div class="legend sm"><span><i class="sw ol-actsw"></i>Recorded Pay myself</span><span><i class="sw c1"></i>Most likely</span><span><i class="sw ol-bandsw"></i>Likely range (8 in 10 futures)</span><span><i class="sw ol-plansw"></i>Planned expense</span></div>'+
+      '<p class="ol-month" id="ol-hist"></p><p class="ol-month" id="ol-month"></p>'+
       '<div class="ol-sub"><div class="ol-subh"><span class="lbl">Planned expenses</span><label class="fp-logged ol-lumps" data-out="lumps"><input type="checkbox"'+(O.lumps?' checked':'')+'> Allow for surprise buys</label></div>'+
         planned+'<div class="fp-foot"><button type="button" class="btn sm" data-add="plan">+ Add planned expense</button><span class="fp-tot" id="ol-lumpnote"></span></div></div>'+
       '<details class="notes ol-tbl"><summary>Month by month</summary><div class="tbl-w"><table class="tbl" id="ol-table"></table></div></details>'+
@@ -500,43 +503,63 @@ var Forecast=(function(){
       ' − food '+esc(fmt(r100(P.parts.food*S.lv)))+' ('+P.foodSrc+') − shopping '+esc(fmt(r100(P.parts.shop*S.lv)))+' ('+P.shopSrc+') − essentials '+esc(fmt(r100(P.parts.ess*S.lv)))+' − InDrive '+esc(fmt(r100(P.parts.ride*S.lv)))+
       ' = <b>'+esc(fmtS(r100(monthly+0)))+'</b> saved'+(S.start.dip<0?'. This month’s shortfall of about '+esc(fmt(r100(-S.start.dip)))+' comes out first.':'.');
     $('#ol-lumpnote').textContent=O.lumps&&S.lam>0?'Surprise buys of Rs 10,000+: about '+(Math.round(S.lam*10)/10)+' a month, '+K(S.lumpAvg)+' each':'';
-    // chart
+    // chart: recorded Pay myself for past cycles, then the projection from this cycle on
+    var past=R.past,A=past.length,isCur=A>0&&past[A-1].day===R.cur.start,s0=isCur?A-1:A,N=s0+H;
     var W=Math.max(280,box.clientWidth),Hh=W<520?220:260,pl=46,pr=14,pt=14,pb=28,iw=W-pl-pr,ih=Hh-pt-pb;
-    var lo=Math.min(0,S.start.bal,Math.min.apply(null,B.map(function(b){return b.p10;}))),hi=Math.max(S.start.bal,Math.max.apply(null,B.map(function(b){return b.p90;})));
+    var vals=past.map(function(p){return p.saved;}).concat([S.start.bal]);
+    var lo=Math.min(0,Math.min.apply(null,vals.concat(B.map(function(b){return b.p10;})))),hi=Math.max.apply(null,vals.concat(B.map(function(b){return b.p90;})));
     var top=Viz.niceMax(hi*1.05),bot=lo<0?-Viz.niceMax(-lo*1.1):0;
-    var X=function(i){return pl+iw*i/H;},Y=function(v){return pt+ih*(1-(v-bot)/(top-bot));};
+    var X=function(i){return pl+iw*i/Math.max(1,N);},Y=function(v){return pt+ih*(1-(v-bot)/(top-bot));};
     var g='',ticks=4;
     for(var t=0;t<=ticks;t++){var v=bot+(top-bot)*t/ticks;g+='<line class="ol-grid'+(Math.abs(v)<1e-6?' zero':'')+'" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+Y(v).toFixed(1)+'" y2="'+Y(v).toFixed(1)+'"/><text class="ol-ax" x="'+(pl-6)+'" y="'+(Y(v)+3.5).toFixed(1)+'" text-anchor="end">'+esc(K(v))+'</text>';}
     if(bot<0) g+='<line class="ol-grid zero" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+Y(0).toFixed(1)+'" y2="'+Y(0).toFixed(1)+'"/>';
-    var pts=[{x:X(0),p10:S.start.bal,p90:S.start.bal,p50:S.start.bal}].concat(B.map(function(b,i){return {x:X(i+1),p10:b.p10,p90:b.p90,p50:b.p50};}));
+    // a divider where the record ends and the projection begins
+    g+='<line class="ol-now" x1="'+X(s0).toFixed(1)+'" x2="'+X(s0).toFixed(1)+'" y1="'+pt+'" y2="'+(pt+ih)+'"/><text class="ol-ax ol-nowt" x="'+(X(s0)+5).toFixed(1)+'" y="'+(pt+9)+'">PROJECTED →</text>';
+    var pts=[{x:X(s0),p10:S.start.bal,p90:S.start.bal,p50:S.start.bal}].concat(B.map(function(b,i){return {x:X(s0+i+1),p10:b.p10,p90:b.p90,p50:b.p50};}));
     var band='M'+pts.map(function(p){return p.x.toFixed(1)+','+Y(p.p90).toFixed(1);}).join('L')+'L'+pts.slice().reverse().map(function(p){return p.x.toFixed(1)+','+Y(p.p10).toFixed(1);}).join('L')+'Z';
     var line='M'+pts.map(function(p){return p.x.toFixed(1)+','+Y(p.p50).toFixed(1);}).join('L');
-    var xl='<text class="ol-ax" x="'+X(0)+'" y="'+(Hh-8)+'" text-anchor="start">Now</text>',step=W<520&&H>6?2:1;
-    rows.forEach(function(r,i){if((i+1)%step) return;var lab=r.m.name+(r.m.name==='Jan'?' ’'+String(r.m.year).slice(2):'');xl+='<text class="ol-ax" x="'+X(i+1).toFixed(1)+'" y="'+(Hh-8)+'" text-anchor="'+(i===H-1?'end':'middle')+'">'+esc(lab)+'</text>';});
-    var marks=rows.map(function(r,i){if(!r.planned) return '';var x=X(i+1).toFixed(1);
+    var act=A?'<path class="ol-act" d="M'+past.map(function(p,i){return X(i).toFixed(1)+','+Y(p.saved).toFixed(1);}).join('L')+'"/>'+
+      past.map(function(p,i){return '<circle class="ol-actdot" cx="'+X(i).toFixed(1)+'" cy="'+Y(p.saved).toFixed(1)+'" r="4"/>';}).join(''):'';
+    // this cycle's shortfall: from the recorded figure down to where the projection starts
+    var drop=isCur&&Math.abs(past[A-1].saved-S.start.bal)>=1?'<line class="ol-drop" x1="'+X(s0).toFixed(1)+'" x2="'+X(s0).toFixed(1)+'" y1="'+Y(past[A-1].saved).toFixed(1)+'" y2="'+Y(S.start.bal).toFixed(1)+'"/>':'';
+    var labs=past.map(function(p){return p.label;}).concat(isCur?[]:['Now']).concat(rows.map(function(r){return r.m.name+(r.m.name==='Jan'?' ’'+String(r.m.year).slice(2):'');}));
+    // as many month labels as fit, always keeping the last one
+    var step=Math.max(1,Math.ceil(N*48/iw)),xl='';
+    labs.forEach(function(lab,i){if(i!==N&&(i%step||N-i<step)) return;xl+='<text class="ol-ax'+(i===s0?' ol-cur':'')+'" x="'+X(i).toFixed(1)+'" y="'+(Hh-8)+'" text-anchor="'+(i===0?'start':i===N?'end':'middle')+'">'+esc(lab)+'</text>';});
+    var marks=rows.map(function(r,i){if(!r.planned) return '';var x=X(s0+i+1).toFixed(1);
       return '<line class="ol-pl" x1="'+x+'" x2="'+x+'" y1="'+pt+'" y2="'+(pt+ih)+'"/><rect class="ol-plm" x="'+(+x-4)+'" y="'+(pt+ih-4)+'" width="8" height="8" rx="1" transform="rotate(45 '+x+' '+(pt+ih)+')"/>';}).join('');
-    box.innerHTML='<svg width="'+W+'" height="'+Hh+'" viewBox="0 0 '+W+' '+Hh+'" role="img" aria-label="Projected Pay myself balance">'+g+marks+
-      '<path class="ol-band" d="'+band+'"/><path class="ol-line" d="'+line+'"/>'+
-      '<circle class="ol-dot" cx="'+X(0)+'" cy="'+Y(S.start.bal).toFixed(1)+'" r="4"/>'+
-      '<circle class="ol-end" cx="'+X(H).toFixed(1)+'" cy="'+Y(last.p50).toFixed(1)+'" r="4"/>'+
+    box.innerHTML='<svg width="'+W+'" height="'+Hh+'" viewBox="0 0 '+W+' '+Hh+'" role="img" aria-label="Recorded and projected Pay myself balance">'+g+marks+
+      '<path class="ol-band" d="'+band+'"/>'+act+drop+'<path class="ol-line" d="'+line+'"/>'+
+      '<circle class="ol-dot" cx="'+X(s0).toFixed(1)+'" cy="'+Y(S.start.bal).toFixed(1)+'" r="4"/>'+
+      '<circle class="ol-end" cx="'+X(N).toFixed(1)+'" cy="'+Y(last.p50).toFixed(1)+'" r="4"/>'+
       '<line class="ol-cross" id="ol-cross" y1="'+pt+'" y2="'+(pt+ih)+'" hidden/><circle class="ol-hov" id="ol-hov" r="5" hidden/>'+
       xl+'<rect class="ol-hit" x="'+pl+'" y="0" width="'+iw+'" height="'+(pt+ih)+'"/></svg>';
     var hit=$('.ol-hit',box),cross=$('#ol-cross'),hov=$('#ol-hov');
     var move=function(e){
-      var rc=box.getBoundingClientRect(),x=e.clientX-rc.left,i=Math.max(0,Math.min(H,Math.round((x-pl)/iw*H)));
-      var p=pts[i],cx=p.x.toFixed(1);
-      cross.setAttribute('x1',cx);cross.setAttribute('x2',cx);cross.removeAttribute('hidden');
-      hov.setAttribute('cx',cx);hov.setAttribute('cy',Y(p.p50).toFixed(1));hov.removeAttribute('hidden');
-      var h;
-      if(i===0) h='<div class="tt-h">Now</div><div class="tt-b">Pay myself '+esc(fmt(S.start.bal))+(S.start.dip<0?'<br>after this month’s shortfall of '+esc(fmt(-S.start.dip)):'')+'</div>';
-      else{var r=rows[i-1];h='<div class="tt-h">End of '+esc(r.m.name+' '+r.m.year)+' cycle</div><div class="tt-b">Likely '+esc(fmt(r100(p.p50)))+'<br>Range '+esc(fmt(r100(p.p10)))+' – '+esc(fmt(r100(p.p90)))+
+      var rc=box.getBoundingClientRect(),x=e.clientX-rc.left,i=Math.max(0,Math.min(N,Math.round((x-pl)/iw*N)));
+      var cx=X(i).toFixed(1),cy,h;
+      if(i<s0||(i===s0&&isCur)){
+        var p=past[i],prev=i>0?past[i-1]:null;cy=Y(p.saved);
+        h='<div class="tt-h">'+esc(p.full)+' · recorded</div><div class="tt-b">Pay myself '+esc(fmt(p.saved))+(prev?'<br>'+(p.saved===prev.saved?'no change since '+esc(prev.full):(p.saved>prev.saved?'+':'\u2212')+esc(fmt(Math.abs(p.saved-prev.saved)))+' since '+esc(prev.full)):'')+
+          (i===s0?'<br>Likely '+esc(fmt(r100(S.start.bal)))+' by '+esc(fmtDay(R.lastDay))+(S.start.dip<0?', after this month’s shortfall':''):'')+'</div>';
+      }else if(i===s0){cy=Y(S.start.bal);h='<div class="tt-h">Now</div><div class="tt-b">Pay myself '+esc(fmt(S.start.bal))+'</div>';}
+      else{var j=i-s0-1,r=rows[j],b=B[j];cy=Y(b.p50);
+        h='<div class="tt-h">End of '+esc(r.m.name+' '+r.m.year)+' cycle</div><div class="tt-b">Likely '+esc(fmt(r100(b.p50)))+'<br>Range '+esc(fmt(r100(b.p10)))+' – '+esc(fmt(r100(b.p90)))+
         '<br>Salary '+esc(fmt(r.salary))+' · saved about '+esc(fmtS(r100(r.saveP50)))+(r.planned?'<br>Planned: '+esc(fmt(r.planned)):'')+'</div>';}
+      cross.setAttribute('x1',cx);cross.setAttribute('x2',cx);cross.removeAttribute('hidden');
+      hov.setAttribute('cx',cx);hov.setAttribute('cy',cy.toFixed(1));hov.removeAttribute('hidden');
       if(UIref) UIref.showTip(h,e.clientX,e.clientY);
     };
     hit.addEventListener('pointermove',move);hit.addEventListener('pointerdown',move);
     hit.addEventListener('pointerleave',function(){cross.setAttribute('hidden','');hov.setAttribute('hidden','');if(UIref) UIref.hideTip();});
+    // what the record says, next to what the projection says
+    if(A>1){
+      var f=past[0],l=past[A-1],per=(l.saved-f.saved)/(A-1);
+      $('#ol-hist').innerHTML='Recorded: Pay myself went from <b>'+esc(fmt(f.saved))+'</b> in '+esc(f.full)+' to <b>'+esc(fmt(l.saved))+'</b> in '+esc(l.full)+', about <b>'+esc(fmtS(r100(per)))+'</b> a month. The projection expects about <b>'+esc(fmtS(r100(gain)))+'</b> a month from here.';
+    }else $('#ol-hist').textContent='';
     // month by month
-    $('#ol-table').innerHTML='<thead><tr><th>Cycle</th><th class="n">Salary</th><th class="n">Mama + Touheed</th><th class="n">Bills</th><th class="n">Spending</th><th class="n">Planned</th><th class="n">Saved (likely)</th><th class="n">Pay myself (likely)</th></tr></thead><tbody>'+
+    $('#ol-table').innerHTML='<thead><tr><th>Cycle</th><th class="n">Salary</th><th class="n">Mama + Touheed</th><th class="n">Bills</th><th class="n">Spending</th><th class="n">Planned</th><th class="n">Saved (likely)</th><th class="n">Pay myself</th></tr></thead><tbody>'+
+      R.past.filter(function(p){return p.day!==R.cur.start;}).map(function(p){return '<tr class="ol-rec"><td>'+esc(p.full)+' <small>recorded</small></td><td class="n" colspan="6"></td><td class="n">'+esc(fmt(p.saved))+'</td></tr>';}).join('')+
       rows.map(function(r,i){return '<tr><td>'+esc(r.m.name+' '+r.m.year)+'</td><td class="n">'+esc(fmt(r.salary))+'</td><td class="n">'+esc(fmt(r.mama+r.touheed))+'</td><td class="n">'+esc(fmt(r.bills))+'</td><td class="n">'+esc(fmt(r100(r.spend)))+'</td><td class="n">'+(r.planned?esc(fmt(r.planned)):'–')+'</td><td class="n">'+esc(fmtS(r100(r.saveP50)))+'</td><td class="n">'+esc(fmt(r100(B[i].p50)))+'</td></tr>';}).join('')+'</tbody>';
   }
 

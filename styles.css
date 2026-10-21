@@ -721,6 +721,14 @@ body.gated .ctx,body.gated .tabs{display:none}
 .ol-end,.ol-hov{fill:var(--c1);stroke:var(--panel);stroke-width:2}
 .ol-cross{stroke:var(--ink-2);stroke-width:1;stroke-dasharray:3 3}
 .ol-pl{stroke:var(--c4);stroke-width:1.5;stroke-dasharray:2 3}
+.ol-act{fill:none;stroke:var(--ink);stroke-width:2;stroke-linejoin:round}
+.ol-actdot{fill:var(--ink);stroke:var(--panel);stroke-width:2}
+.ol-drop{stroke:var(--critical);stroke-width:2;stroke-dasharray:3 3}
+.ol-now{stroke:var(--line-2);stroke-width:1}
+.ol-nowt{font-size:9.5px;letter-spacing:.08em}
+.ol-ax.ol-cur{fill:var(--ink);font-weight:600}
+.sw.ol-actsw{background:var(--ink)}
+.ol-rec td{color:var(--ink-2)}.ol-rec small{font-size:10.5px;color:var(--muted);margin-left:4px}
 .ol-plm{fill:var(--c4)}
 .ol-hit{fill:transparent;cursor:crosshair;touch-action:pan-y}
 .sw.ol-bandsw{background:rgba(57,135,229,.35)}

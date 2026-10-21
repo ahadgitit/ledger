@@ -815,7 +815,8 @@
   }
   function hideTip(){(tip||$('#tip')).classList.remove('on');}
   function tipFor(e){
-    if(e.target.closest&&e.target.closest('#traj-hit')) return;
+    // charts with their own crosshair tooltip
+    if(e.target.closest&&e.target.closest('#traj-hit,.ol-hit')) return;
     var t=e.target.closest&&e.target.closest('[data-tip]');
     if(!t){hideTip();return;}
     var parts=t.getAttribute('data-tip').split('\n');

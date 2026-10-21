@@ -104,7 +104,7 @@ python3 -m http.server 8000
   - **InDrive**: your low, average or high per-day rate from past months times the days left. Low and high are the averages of your cheaper and dearer months.
   - **Advance payments** to Touheed or Mama: they come out of Pay myself, not this budget, and at the next payday you owe that much less, so it goes back to Pay myself. If you already logged an advance in the sheet, it is added back to the budget.
 
-  - **Savings outlook** (at the bottom): where Pay myself is heading over the next 6 or 12 payday cycles, on a chart with the most likely path and the range 8 in 10 futures fall in.
+  - **Savings outlook** (at the bottom): your recorded Pay myself for every past cycle (each one already includes the months before), then where it is heading over the next 6 or 12 payday cycles, with the most likely path and the range 8 in 10 futures fall in. A line compares the recorded monthly growth with the projected one.
     - **Inputs:** your base salary (130,000 by default), next payday's salary (blank means the same as base), and planned expenses for any coming month.
     - **Spending level:** whether you expect to spend 10% less than this month, the same, or 10% more.
     - **Each month's spending** comes from this month's plan (the budget above it): bills, essentials, InDrive, and your food or shopping cap (your usual where no cap is set), scaled to a month. Mama and Touheed are paid on top, less any advance in the first month.
