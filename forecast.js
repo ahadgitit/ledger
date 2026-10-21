@@ -466,7 +466,7 @@ var Forecast=(function(){
     cyc.forEach(function(c){byYm[ymKey(c.start)]=c;});
     var keys=Object.keys(inc).concat(Object.keys(byYm)).filter(function(k){return k>='2026-01';}).sort();
     if(!keys.length) return [];
-    var out=[],y=+keys[0].slice(0,4),m=+keys[0].slice(5),end=keys[keys.length-1],prevPM=null;
+    var out=[],y=+keys[0].slice(0,4),m=+keys[0].slice(5),end=keys[keys.length-1],prevPM=null,runPM=null;
     for(;;){
       var k=y+'-'+('0'+m).slice(-2);
       if(k>end) break;
@@ -476,12 +476,14 @@ var Forecast=(function(){
         row.kind=c.open?'open':'tracked';row.spent=A.spent;row.by=A.by;row.other=A.other;
         row.saved=i.saved!=null?i.saved:pm>0?(prevPM!=null?pm-prevPM:pm):0;
         row.first=pm>0&&prevPM==null&&i.saved==null;row.pm=pm>0?pm:null;
-        prevPM=pm>0?pm:prevPM;
+        prevPM=pm>0?pm:prevPM;runPM=null;
       }else{
         row.saved=i.saved!=null?i.saved:null;
         row.kind=row.saved!=null&&row.received!=null?'partial':'untracked';
         // no spending record: whatever was not saved is taken as spent
         row.spent=row.kind==='partial'?Math.max(0,row.received-row.saved):null;
+        // months before the Tracking tab: Pay myself builds up from the Saved column
+        runPM=row.saved!=null?(runPM||0)+row.saved:null;row.pm=runPM;row.pmEst=runPM!=null;
         prevPM=null;
       }
       row.left=row.received!=null&&row.spent!=null&&row.saved!=null?row.received-row.spent-row.saved:null;
@@ -505,7 +507,7 @@ var Forecast=(function(){
     return ui0.pnl('cf','Money in, out and saved','each pay cycle since '+esc(ymName(CF[0].key,true)),
       '<div class="cf-kpis" id="cf-kpis"></div>'+
       '<div class="cf-chart" id="cf-chart"></div>'+
-      '<div class="legend sm"><span><i class="sw cf-sav"></i>Saved to Pay myself</span><span><i class="sw cf-sp"></i>Spent</span><span><i class="sw cf-lo"></i>Left over</span><span><i class="sw cf-ex"></i>From earlier money</span><span><i class="sw cf-rc"></i>Pay received</span><span><i class="sw cf-nt"></i>Not tracked</span></div>'+
+      '<div class="legend sm"><span><i class="sw cf-sav"></i>Saved to Pay myself</span><span><i class="sw cf-sp"></i>Spent</span><span><i class="sw cf-lo"></i>Left over</span><span><i class="sw cf-ex"></i>From earlier money</span><span><i class="sw cf-rc"></i>Pay received</span><span><i class="sw cf-pmsw"></i>Pay myself balance</span><span><i class="sw cf-nt"></i>Not tracked</span></div>'+
       '<div class="cf-detail" id="cf-detail"></div>',{cls:'cf-pnl'});
   }
   var ui0=null;
@@ -524,11 +526,11 @@ var Forecast=(function(){
       tile('Saved',pm!=null?esc(fmt(pm)):'\u2013',pm!=null?'Pay myself now, as of '+esc(ymName(pmAt,true)):'no Pay myself row yet')+
       tile('Kept',pm!=null&&rec?Math.round(pm/rec*100)+'<small>%</small>':'\u2013','of everything you were paid');
     var W=Math.max(300,box.clientWidth),H=W<520?240:300,pl=46,pr=8,pt=26,pb=40,iw=W-pl-pr,ih=H-pt-pb;
-    var mx=1;CF.forEach(function(r){mx=Math.max(mx,r.received||0,(r.spent||0)+Math.max(0,r.saved||0));});
+    var mx=1;CF.forEach(function(r){mx=Math.max(mx,r.received||0,(r.spent||0)+Math.max(0,r.saved||0),r.pm||0);});
     var stp=Viz.niceMax(mx*1.08/4),nt=Math.ceil(mx*1.08/stp),top=stp*nt,Y=function(v){return pt+ih*(1-v/top);},hY=function(v){return ih*v/top;};
     var slot=iw/n,bw=Math.min(54,slot*0.62),g='';
     for(var t=0;t<=nt;t++){var v=stp*t;g+='<line class="ol-grid'+(t===0?' zero':'')+'" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+Y(v).toFixed(1)+'" y2="'+Y(v).toFixed(1)+'"/><text class="ol-ax" x="'+(pl-6)+'" y="'+(Y(v)+3.5).toFixed(1)+'" text-anchor="end">'+esc(K(v))+'</text>';}
-    var cols='';
+    var cols='',vals='';
     CF.forEach(function(r,i){
       var cx=pl+slot*i+slot/2,x=cx-bw/2,base=pt+ih,parts='',tip=ymName(r.key,true)+(r.kind==='open'?' (so far)':'');
       if(r.key===sel) cols+='<rect class="cf-selbg" x="'+(pl+slot*i+1).toFixed(1)+'" y="'+(pt-20)+'" width="'+(slot-2).toFixed(1)+'" height="'+(ih+20)+'" rx="3"/>';
@@ -547,17 +549,28 @@ var Forecast=(function(){
         tip+='\nReceived '+(r.received!=null?fmt(r.received):'not entered')+'\nSaved '+fmtS(r.saved)+(r.first?' (first record of Pay myself)':'')+'\nSpent '+fmt(sp)+(r.kind==='partial'?' (estimate: pay minus saved)':'')+
           (r.left!=null?'\n'+(r.left>=0?'Left over '+fmt(r.left):'From earlier money '+fmt(-r.left)):'')+(r.received?'\nSavings rate '+Math.round((r.saved||0)/r.received*100)+'%':'');
       }
-      if(r.received!=null) parts+='<line class="cf-rc" x1="'+(x-3).toFixed(1)+'" x2="'+(x+bw+3).toFixed(1)+'" y1="'+Y(r.received).toFixed(1)+'" y2="'+Y(r.received).toFixed(1)+'"/>'+
-        '<text class="cf-v" x="'+cx.toFixed(1)+'" y="'+(Y(Math.max(r.received,(r.spent||0)+Math.max(0,r.saved||0)))-6).toFixed(1)+'" text-anchor="middle">'+esc(K(r.received))+'</text>';
-      var rate=r.received&&r.saved!=null&&r.kind!=='untracked'?Math.round(r.saved/r.received*100)+'%':r.kind==='untracked'?'–':'';
+      if(r.received!=null) parts+='<line class="cf-rc" x1="'+(x-3).toFixed(1)+'" x2="'+(x+bw+3).toFixed(1)+'" y1="'+Y(r.received).toFixed(1)+'" y2="'+Y(r.received).toFixed(1)+'"/>';
+      // pay labels go on top of everything, the balance line included
+      if(r.received!=null) vals+='<text class="cf-v" x="'+cx.toFixed(1)+'" y="'+(Y(Math.max(r.received,(r.spent||0)+Math.max(0,r.saved||0)))-6).toFixed(1)+'" text-anchor="middle">'+esc(K(r.received))+'</text>';
+      var rate=r.pm!=null?K(r.pm):'–';
+      if(r.pm!=null) tip+='\nPay myself balance '+fmt(r.pm)+(r.pmEst?' (from the Income tab)':'');
       cols+='<g class="cf-col'+(r.key===sel?' on':'')+'" data-cf="'+r.key+'" data-tip="'+esc(tip)+'">'+parts+
         '<text class="ol-ax cf-m'+(r.key===sel?' ol-cur':'')+'" x="'+cx.toFixed(1)+'" y="'+(H-22)+'" text-anchor="middle">'+esc(ymName(r.key))+'</text>'+
         '<text class="cf-r" x="'+cx.toFixed(1)+'" y="'+(H-8)+'" text-anchor="middle">'+rate+'</text>'+
         '<rect class="cf-hit" x="'+(pl+slot*i).toFixed(1)+'" y="0" width="'+slot.toFixed(1)+'" height="'+H+'"/></g>';
     });
+    // Pay myself balance: a line through the months it is known, broken where it is not
+    var pmLine='',seg=[],flush=function(){if(seg.length>1) pmLine+='<path class="cf-pm" d="M'+seg.join('L')+'"/>';seg=[];};
+    CF.forEach(function(r,i){
+      var cx=pl+slot*i+slot/2;
+      if(r.pm==null){flush();return;}
+      seg.push(cx.toFixed(1)+','+Y(r.pm).toFixed(1));
+    });
+    flush();
+    CF.forEach(function(r,i){if(r.pm!=null) pmLine+='<circle class="cf-pmd'+(r.pmEst?' est':'')+'" cx="'+(pl+slot*i+slot/2).toFixed(1)+'" cy="'+Y(r.pm).toFixed(1)+'" r="4.5"/>';});
     box.innerHTML='<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Pay received each month, split into saved, spent and left over">'+
       '<defs><pattern id="cf-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" class="cf-hb"/><line x1="0" y1="0" x2="0" y2="6" class="cf-hl"/></pattern></defs>'+
-      g+cols+'<text class="cf-rl" x="'+(pl-6)+'" y="'+(H-8)+'" text-anchor="end">saved</text></svg>';
+      g+cols+pmLine+vals+'</svg>';
     drawCfDetail(sel);
   }
   function drawCfDetail(key){
@@ -568,6 +581,7 @@ var Forecast=(function(){
       '<div class="cf-st cf-rcv" data-cf-month="'+key+'"><span>Received</span><div class="cf-edit"><span class="fp-in"><span>Rs</span><input class="inline" inputmode="numeric" enterkeyhint="done" autocomplete="off" value="'+(r.received!=null?esc(Math.round(r.received).toLocaleString('en-US')):'')+'" placeholder="Not entered" aria-label="Received in '+esc(ymName(key,true))+'"></span><button type="button" class="btn sm" data-cf-save>Save</button></div>'+(r.note?'<small>'+esc(r.note)+'</small>':'')+'</div>'+
       (r.kind==='untracked'?'<p class="cf-none">'+esc(ymName(key,true))+' is not in your Tracking tab, so what you spent and saved is unknown. Add a Saved figure for it in the Income tab of the sheet to fill it in.</p>':
         stat('Saved to Pay myself',esc(fmtS(r.saved)),'cf-sav',r.first?'first record of Pay myself':r.kind==='partial'?'from the Income tab':'Pay myself grew by this')+
+        (r.pm!=null?stat('Pay myself balance',esc(fmt(r.pm)),'cf-pmsw',r.pmEst?'built up from the Saved column of the Income tab':'logged in this cycle'):'')+
         stat('Spent',esc(fmt(r.spent)),'cf-sp',r.kind==='partial'?'estimate: pay minus saved':r.kind==='open'?'so far this cycle':'')+
         (r.left!=null?(r.left>=0?stat('Left over',esc(fmt(r.left)),'cf-lo','not spent or saved'):stat('From earlier money',esc(fmt(-r.left)),'cf-ex','spending and saving beyond the pay')):'')+
         (r.received?stat('Savings rate',Math.round((r.saved||0)/r.received*100)+'%','',''):''))+

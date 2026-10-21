@@ -782,8 +782,11 @@ body.gated .ctx,body.gated .tabs{display:none}
 .cf-nt{fill:rgba(255,255,255,.02);stroke:var(--line-2);stroke-width:1.2;stroke-dasharray:4 3}
 .cf-q{font:600 16px var(--font-num);fill:var(--muted)}
 .cf-rc{stroke:var(--ink);stroke-width:2;stroke-linecap:round}
-.cf-v{font:600 10.5px var(--font-num);fill:var(--ink)}
+.cf-v{font:600 10.5px var(--font-num);fill:var(--ink);paint-order:stroke;stroke:var(--panel);stroke-width:3px;stroke-linejoin:round;pointer-events:none}
 .cf-r{font:10px var(--font-num);fill:var(--c3)}
+.cf-pm{fill:none;stroke:var(--c3);stroke-width:2;stroke-linejoin:round;pointer-events:none}
+.cf-pmd{fill:var(--c3);stroke:var(--panel);stroke-width:2;pointer-events:none}.cf-pmd.est{fill:var(--panel);stroke:var(--c3)}
+.sw.cf-pmsw{height:8px;width:8px;border-radius:50%;background:var(--c3);box-shadow:0 0 0 2px var(--panel),0 0 0 3px var(--c3)}
 .cf-rl{font:9.5px var(--font-ui);letter-spacing:.06em;fill:var(--muted)}
 .sw.cf-sav{background:var(--c3)}.sw.cf-sp{background:var(--c2)}.sw.cf-lo{background:var(--cn);opacity:.6}
 .sw.cf-ex{background:repeating-linear-gradient(45deg,var(--c2) 0 2px,rgba(217,89,38,.15) 2px 5px)}
