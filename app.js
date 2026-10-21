@@ -7,7 +7,7 @@
   var SCOPE='https://www.googleapis.com/auth/spreadsheets';
   var API='https://sheets.googleapis.com/v4/spreadsheets/';
   var TRACK_RANGE='Tracking!A1:G5000';
-  var INCOME_RANGE="'Dashboard Data'!A1:L120";
+  var INCOME_RANGE='Income!A1:E400';
 
   var local={};
   try{local=JSON.parse(localStorage.getItem(LS_CFG)||'{}')||{};}catch(e){}
@@ -153,7 +153,7 @@
       S.tracking=rows;S.rowCount=rows.length;
       S.at=Date.now();
       S.stale=false;S.err=null;retried=false;
-      // The optional Dashboard Data tab: stop asking once Google says it does not exist.
+      // The optional Income tab: stop asking once Google says it does not exist.
       return (noIncome?Promise.reject({code:'not_found'}):call(INCOME_RANGE)).then(function(ir){
         S.incomeRows=ir;S.income=Logic.parseIncome(ir);
       }).catch(function(e){if(e&&e.code==='not_found') noIncome=true;S.incomeRows=null;S.income={};}).then(function(){S.calls=calls;});
@@ -209,6 +209,20 @@
     batch:function(data,input){return api('/values:batchUpdate',{method:'POST',body:{valueInputOption:input||'RAW',data:data}});},
     clear:function(range){return api('/values/'+encodeURIComponent(range)+':clear',{method:'POST',body:{}});},
     refresh:function(manual){retried=false;return load(!!manual);},
+    // Write one month's pay to the Income tab, creating the tab the first time.
+    saveIncome:function(y,m,received){
+      var cur=(S.income||{})[y+'-'+('0'+m).slice(-2)];
+      var ready=noIncome
+        ?api(':batchUpdate',{method:'POST',body:{requests:[{addSheet:{properties:{title:'Income',gridProperties:{frozenRowCount:1}}}}]}}).then(function(){
+            return api('/values/'+encodeURIComponent('Income!A1:E1')+'?valueInputOption=RAW',{method:'PUT',body:{values:[['Year','Month','Received','Saved','Note']]}});})
+        :Promise.resolve();
+      return ready.then(function(){
+        noIncome=false;
+        return cur&&cur.row?cur.row:getValues('Income!A1:A400').then(function(rows){return Math.max(rows.length,1)+1;});
+      }).then(function(row){
+        return api('/values/'+encodeURIComponent('Income!A'+row+':C'+row)+'?valueInputOption=RAW',{method:'PUT',body:{values:[[y,m,received]]}});
+      }).then(function(){retried=false;return load(false);});
+    },
     on:function(f){listeners.push(f);}
   };
 

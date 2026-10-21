@@ -143,20 +143,17 @@ const Logic=(function(){
     for(let d=p.start;d<=p.end;d++) daily.push({day:d,v:days.get(d)||0});
     return {by:by,other:other,spent:spent,saved:saved,back:back,mode:mode,top:top,daily:daily,outside:outside,count:top.length,dayCount:p.end-p.start+1};
   }
+  // The Income tab: Year | Month | Received | Saved | Note, one row per payday cycle,
+  // keyed 'YYYY-MM' by the month the cycle starts in. Saved is only for months the
+  // Tracking tab does not cover; row is the sheet row, for writing back.
   function parseIncome(rows){
     const out={};
     rows=rows||[];
-    let i=-1;
     for(let j=0;j<rows.length;j++){
-      const r=rows[j]||[];
-      if(String(r[0]).trim()==='Cycle'&&String(r[1]).trim()==='Income'){i=j;break;}
-    }
-    if(i<0) return out;
-    for(let j=i+1;j<rows.length;j++){
-      const r=rows[j]||[];
-      const a=String(r[0]==null?'':r[0]).trim();
-      if(!a) break;
-      out[a]={income:num(r[1]),spent:num(r[2]),saved:num(r[3])};
+      const r=rows[j]||[],y=num(r[0]),m=num(r[1]);
+      if(!(y>2000&&m>=1&&m<=12)) continue;
+      const rec=num(r[2]),sav=num(r[3]);
+      out[y+'-'+('0'+m).slice(-2)]={received:isFinite(rec)?rec:null,saved:isFinite(sav)?sav:null,note:String(r[4]==null?'':r[4]),row:j+1};
     }
     return out;
   }

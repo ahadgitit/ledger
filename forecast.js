@@ -175,6 +175,7 @@ var Forecast=(function(){
       '<div class="legend sm"><span><i class="sw c1"></i>Food each month</span><span><i class="sw fc-capsw"></i><span id="fp-capleg">Your cap</span></span></div>';
   }
   function view(M,ui){
+    ui0=ui;
     R=model(M);
     if(R.msg) return '<section class="pnl"><div class="pnl-b"><div class="empty">'+esc(R.msg)+'</div></div></section>';
     var I=inputs(R),until=fmtDay(R.lastDay),foodMode=I.mode==='food',d=R.days;
@@ -215,7 +216,7 @@ var Forecast=(function(){
         '<p class="fp-capd" data-capd="'+which+'"></p></div>';
     };
     var result=function(which){return '<div class="fp-pred"><span class="lbl">Predicted '+(which==='food'?'food':'shopping')+' budget</span><b id="fp-pred"></b><small id="fp-pred-d"></small></div>';};
-    return '<div class="plan" id="fp">'+
+    return '<div class="plan" id="fp">'+cfPrompt()+
       '<section class="pnl m-hero fp-hero" id="fp-hero"><div class="pnl-b">'+
         '<div class="fp-top"><div class="m-q">Can your Pay myself of <b>'+esc(fmt(R.saved))+'</b> stay untouched until '+esc(until)+'?</div>'+
           '<div class="fp-mode"><span class="lbl">Predict</span><div class="seg" role="group" aria-label="What to predict"><button type="button" data-pmode="food" aria-pressed="'+foodMode+'">Food</button><button type="button" data-pmode="shop" aria-pressed="'+!foodMode+'">Shopping</button></div></div></div>'+
@@ -251,7 +252,7 @@ var Forecast=(function(){
         '<p>Predict food: your shopping cap is taken off too, and what is left is for food. Predict shopping: your food cap is taken off, and what is left is for shopping.</p>'+
         '<p>An advance to Touheed or Mama is paid out of Pay myself, so it lowers what you keep this month but not this budget, and at the next payday you owe that much less. If you already logged it in the sheet, Remaining went down by it, so it is added back here.</p>'+
         '<p>What you enter here is kept in this browser.</p></details>'+
-      outlookView()+
+      cfView(M)+outlookView()+
     '</div>';
   }
 
@@ -318,6 +319,9 @@ var Forecast=(function(){
       if(t.matches('.fp-in input')){var v=amt(t.value);t.value=v==null?'':v.toLocaleString('en-US');}
     });
     root.addEventListener('click',function(e){
+      var c=e.target.closest('[data-cf]'),sv=e.target.closest('[data-cf-save]');
+      if(sv){saveIncome(sv);return;}
+      if(c){s.cfSel=c.dataset.cf;save();drawCf();return;}
       var t=e.target.closest('button');if(!t) return;
       if(t.dataset.pmode){if(s.mode!==t.dataset.pmode){s.mode=t.dataset.pmode;save();rerender();}}
       else if(t.dataset.ride){s.ride=t.dataset.ride;save();$$('[data-ride]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});update();}
@@ -343,7 +347,12 @@ var Forecast=(function(){
         delete s.bills[id];s.ess={};delete s.essExtra;delete s.shopCap;delete s.foodCap;delete s.ride;save();rerender();
       }
     });
+    root.addEventListener('keydown',function(e){
+      var f=e.target.closest('[data-cf-month]');
+      if(f&&e.key==='Enter'){e.preventDefault();saveIncome($('[data-cf-save]',f));}
+    });
     update();
+    drawCf();
   }
   function focusLast(sel){var l=$$('#fp '+sel);if(l.length) l[l.length-1].focus();}
   function rerender(then){
@@ -440,6 +449,169 @@ var Forecast=(function(){
     st+=limit>0?' · over your '+fmt(limit)+' limit on '+over+' of them':' · set a food limit to compare';
     if(cyc) st+=' · '+R.days+(R.days===1?' day':' days')+' left, today included';
     $('#fd-stats').textContent=st;
+  }
+
+  // ---------------------------------------------------------------- money in, out and saved
+  /* One column per month since January: what you were paid (Income tab), split into
+     what went to Pay myself and what was spent (Tracking tab), with what was left over,
+     or what came from earlier money when spending and saving came to more than the pay.
+     Saved is how much Pay myself grew that cycle; Pay myself is a running total, so the
+     first recorded month counts in full. Months the Tracking tab does not cover use the
+     Saved column of the Income tab. */
+  var FULLMON=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  function ymKey(day){var d=new Date(day*DAY);return d.getUTCFullYear()+'-'+('0'+(d.getUTCMonth()+1)).slice(-2);}
+  function ymName(k,full){var y=+k.slice(0,4),m=+k.slice(5)-1;return full?FULLMON[m]+' '+y:MON[m];}
+  function cashflow(M){
+    var inc=L.S.income||{},cyc=Logic.cyclePeriods(M.parsed,M.today),byYm={};
+    cyc.forEach(function(c){byYm[ymKey(c.start)]=c;});
+    var keys=Object.keys(inc).concat(Object.keys(byYm)).filter(function(k){return k>='2026-01';}).sort();
+    if(!keys.length) return [];
+    var out=[],y=+keys[0].slice(0,4),m=+keys[0].slice(5),end=keys[keys.length-1],prevPM=null;
+    for(;;){
+      var k=y+'-'+('0'+m).slice(-2);
+      if(k>end) break;
+      var c=byYm[k],i=inc[k]||{},row={key:k,received:i.received!=null?i.received:null,note:i.note||''};
+      if(c){
+        var A=Logic.aggregate(c),pm=c.tx.filter(function(t){return t.cat==='savings';}).reduce(function(a,t){return a+t.amt;},0);
+        row.kind=c.open?'open':'tracked';row.spent=A.spent;row.by=A.by;row.other=A.other;
+        row.saved=i.saved!=null?i.saved:pm>0?(prevPM!=null?pm-prevPM:pm):0;
+        row.first=pm>0&&prevPM==null&&i.saved==null;
+        prevPM=pm>0?pm:prevPM;
+      }else{
+        row.saved=i.saved!=null?i.saved:null;
+        row.kind=row.saved!=null&&row.received!=null?'partial':'untracked';
+        // no spending record: whatever was not saved is taken as spent
+        row.spent=row.kind==='partial'?Math.max(0,row.received-row.saved):null;
+        prevPM=null;
+      }
+      row.left=row.received!=null&&row.spent!=null&&row.saved!=null?row.received-row.spent-row.saved:null;
+      out.push(row);
+      if(++m>12){m=1;y++;}
+    }
+    return out;
+  }
+
+  var CF=null;
+  function cfPrompt(){
+    var k=ymKey(R.cur.start),i=(L.S.income||{})[k];
+    if(i&&i.received!=null) return '';
+    return '<section class="pnl cf-ask" id="cf-ask"><div class="pnl-b"><div class="cf-ask-t"><b>New pay cycle · '+esc(ymName(k,true))+'</b><span>How much did you receive this payday? It keeps your money-in chart up to date.</span></div>'+
+      '<div class="cf-ask-f" data-cf-month="'+k+'"><span class="fp-in"><span>Rs</span><input class="inline" inputmode="numeric" enterkeyhint="done" autocomplete="off" placeholder="Salary received" aria-label="Salary received"></span>'+
+      '<button type="button" class="btn primary sm" data-cf-save>Save</button></div></div></section>';
+  }
+  function cfView(M){
+    CF=cashflow(M);
+    if(!CF.length) return '';
+    return ui0.pnl('cf','Money in, out and saved','each pay cycle since '+esc(ymName(CF[0].key,true)),
+      '<div class="cf-kpis" id="cf-kpis"></div>'+
+      '<div class="cf-chart" id="cf-chart"></div>'+
+      '<div class="legend sm"><span><i class="sw cf-sav"></i>Saved to Pay myself</span><span><i class="sw cf-sp"></i>Spent</span><span><i class="sw cf-lo"></i>Left over</span><span><i class="sw cf-ex"></i>From earlier money</span><span><i class="sw cf-rc"></i>Pay received</span><span><i class="sw cf-nt"></i>Not tracked</span></div>'+
+      '<div class="cf-detail" id="cf-detail"></div>',{cls:'cf-pnl'});
+  }
+  var ui0=null;
+  function cfSel(){var s=load().cfSel;return CF.some(function(r){return r.key===s;})?s:CF[CF.length-1].key;}
+  function drawCf(){
+    var box=$('#cf-chart');if(!box||!CF||!CF.length) return;
+    var sel=cfSel(),n=CF.length;
+    // the year so far
+    var rec=0,spent=0,saved=0,recS=0,months=0;
+    CF.forEach(function(r){if(r.received!=null) rec+=r.received;if(r.kind==='tracked'||r.kind==='open') spent+=r.spent;if(r.saved!=null&&r.received!=null){saved+=r.saved;recS+=r.received;months++;}});
+    var tile=function(k,v,sub,cls){return '<div><span>'+esc(k)+'</span><b class="'+(cls||'')+'">'+v+'</b><small>'+sub+'</small></div>';};
+    $('#cf-kpis').innerHTML=
+      tile('Received',esc(fmt(rec)),CF.filter(function(r){return r.received!=null;}).length+' paydays')+
+      tile('Spent',esc(fmt(spent)),'in the months you tracked')+
+      tile('Saved',esc(fmtS(saved)),'to Pay myself, '+months+' months',saved<0?'neg':'')+
+      tile('Savings rate',recS?Math.round(saved/recS*100)+'<small>%</small>':'–','of pay, those months');
+    var W=Math.max(300,box.clientWidth),H=W<520?240:300,pl=46,pr=8,pt=26,pb=40,iw=W-pl-pr,ih=H-pt-pb;
+    var mx=1;CF.forEach(function(r){mx=Math.max(mx,r.received||0,(r.spent||0)+Math.max(0,r.saved||0));});
+    var stp=Viz.niceMax(mx*1.08/4),nt=Math.ceil(mx*1.08/stp),top=stp*nt,Y=function(v){return pt+ih*(1-v/top);},hY=function(v){return ih*v/top;};
+    var slot=iw/n,bw=Math.min(54,slot*0.62),g='';
+    for(var t=0;t<=nt;t++){var v=stp*t;g+='<line class="ol-grid'+(t===0?' zero':'')+'" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+Y(v).toFixed(1)+'" y2="'+Y(v).toFixed(1)+'"/><text class="ol-ax" x="'+(pl-6)+'" y="'+(Y(v)+3.5).toFixed(1)+'" text-anchor="end">'+esc(K(v))+'</text>';}
+    var cols='';
+    CF.forEach(function(r,i){
+      var cx=pl+slot*i+slot/2,x=cx-bw/2,base=pt+ih,parts='',tip=ymName(r.key,true)+(r.kind==='open'?' (so far)':'');
+      if(r.key===sel) cols+='<rect class="cf-selbg" x="'+(pl+slot*i+1).toFixed(1)+'" y="'+(pt-20)+'" width="'+(slot-2).toFixed(1)+'" height="'+(ih+20)+'" rx="3"/>';
+      if(r.kind==='untracked'){
+        if(r.received!=null) parts+='<rect class="cf-nt" x="'+x.toFixed(1)+'" y="'+Y(r.received).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+hY(r.received).toFixed(1)+'" rx="3"/><text class="cf-q" x="'+cx.toFixed(1)+'" y="'+(Y(r.received/2)+4).toFixed(1)+'" text-anchor="middle">?</text>';
+        tip+='\nReceived '+(r.received!=null?fmt(r.received):'not entered')+'\nSpending and saving not tracked';
+      }else{
+        var y=base,sv=Math.max(0,r.saved||0),sp=r.spent||0,cap=r.received!=null?r.received:sv+sp;
+        var seg=function(cls,v){if(!(v>0)) return;var h=hY(v);parts+='<rect class="'+cls+'" x="'+x.toFixed(1)+'" y="'+(y-h).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+Math.max(0,h-1).toFixed(1)+'"/>';y-=h;};
+        seg('cf-sav',sv);
+        // spending up to the pay, and any beyond it, which came from earlier money
+        var within=Math.max(0,Math.min(sp,cap-sv));
+        seg('cf-sp'+(r.kind==='partial'?' est':''),within);
+        seg('cf-ex',sp-within);
+        if(r.left>0) seg('cf-lo',r.left);
+        tip+='\nReceived '+(r.received!=null?fmt(r.received):'not entered')+'\nSaved '+fmtS(r.saved)+(r.first?' (first record of Pay myself)':'')+'\nSpent '+fmt(sp)+(r.kind==='partial'?' (estimate: pay minus saved)':'')+
+          (r.left!=null?'\n'+(r.left>=0?'Left over '+fmt(r.left):'From earlier money '+fmt(-r.left)):'')+(r.received?'\nSavings rate '+Math.round((r.saved||0)/r.received*100)+'%':'');
+      }
+      if(r.received!=null) parts+='<line class="cf-rc" x1="'+(x-3).toFixed(1)+'" x2="'+(x+bw+3).toFixed(1)+'" y1="'+Y(r.received).toFixed(1)+'" y2="'+Y(r.received).toFixed(1)+'"/>'+
+        '<text class="cf-v" x="'+cx.toFixed(1)+'" y="'+(Y(Math.max(r.received,(r.spent||0)+Math.max(0,r.saved||0)))-6).toFixed(1)+'" text-anchor="middle">'+esc(K(r.received))+'</text>';
+      var rate=r.received&&r.saved!=null&&r.kind!=='untracked'?Math.round(r.saved/r.received*100)+'%':r.kind==='untracked'?'–':'';
+      cols+='<g class="cf-col'+(r.key===sel?' on':'')+'" data-cf="'+r.key+'" data-tip="'+esc(tip)+'">'+parts+
+        '<text class="ol-ax cf-m'+(r.key===sel?' ol-cur':'')+'" x="'+cx.toFixed(1)+'" y="'+(H-22)+'" text-anchor="middle">'+esc(ymName(r.key))+'</text>'+
+        '<text class="cf-r" x="'+cx.toFixed(1)+'" y="'+(H-8)+'" text-anchor="middle">'+rate+'</text>'+
+        '<rect class="cf-hit" x="'+(pl+slot*i).toFixed(1)+'" y="0" width="'+slot.toFixed(1)+'" height="'+H+'"/></g>';
+    });
+    box.innerHTML='<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Pay received each month, split into saved, spent and left over">'+
+      '<defs><pattern id="cf-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" class="cf-hb"/><line x1="0" y1="0" x2="0" y2="6" class="cf-hl"/></pattern></defs>'+
+      g+cols+'<text class="cf-rl" x="'+(pl-6)+'" y="'+(H-8)+'" text-anchor="end">saved</text></svg>';
+    drawCfDetail(sel);
+  }
+  function drawCfDetail(key){
+    var r=CF.find(function(x){return x.key===key;}),box=$('#cf-detail');if(!r||!box) return;
+    var y=+key.slice(0,4),m=+key.slice(5);
+    var stat=function(k,v,cls,sub){return '<div class="cf-st'+(cls?' '+cls:'')+'"><span><i class="sw '+(cls||'')+'"></i>'+esc(k)+'</span><b>'+v+'</b>'+(sub?'<small>'+sub+'</small>':'')+'</div>';};
+    var stats='<div class="cf-sts">'+
+      '<div class="cf-st cf-rcv" data-cf-month="'+key+'"><span>Received</span><div class="cf-edit"><span class="fp-in"><span>Rs</span><input class="inline" inputmode="numeric" enterkeyhint="done" autocomplete="off" value="'+(r.received!=null?esc(Math.round(r.received).toLocaleString('en-US')):'')+'" placeholder="Not entered" aria-label="Received in '+esc(ymName(key,true))+'"></span><button type="button" class="btn sm" data-cf-save>Save</button></div>'+(r.note?'<small>'+esc(r.note)+'</small>':'')+'</div>'+
+      (r.kind==='untracked'?'<p class="cf-none">'+esc(ymName(key,true))+' is not in your Tracking tab, so what you spent and saved is unknown. Add a Saved figure for it in the Income tab of the sheet to fill it in.</p>':
+        stat('Saved to Pay myself',esc(fmtS(r.saved)),'cf-sav',r.first?'first record of Pay myself':r.kind==='partial'?'from the Income tab':'Pay myself grew by this')+
+        stat('Spent',esc(fmt(r.spent)),'cf-sp',r.kind==='partial'?'estimate: pay minus saved':r.kind==='open'?'so far this cycle':'')+
+        (r.left!=null?(r.left>=0?stat('Left over',esc(fmt(r.left)),'cf-lo','not spent or saved'):stat('From earlier money',esc(fmt(-r.left)),'cf-ex','spending and saving beyond the pay')):'')+
+        (r.received?stat('Savings rate',Math.round((r.saved||0)/r.received*100)+'%','',''):''))+
+      '</div>';
+    // where the pay went: received (and earlier money) into saved, each category and left over
+    var flow='';
+    if(r.kind!=='untracked'&&r.received){
+      var src=[{id:'rcv',label:'Received',v:r.received,cls:'acct'}];
+      if(r.left<0) src.push({id:'old',label:'Earlier money',v:-r.left,cls:'cn'});
+      var dst=[];
+      if(r.saved>0) dst.push({id:'sav',label:'Pay myself',v:r.saved,cls:'cf-n-sav'});
+      if(r.by){
+        // categories under 5% of the pay go together, so the small ones stay readable
+        var small=r.other>0?r.other:0,few=[];
+        Object.keys(r.by).filter(function(c){return r.by[c]>0;}).sort(function(a,b){return r.by[b]-r.by[a];}).forEach(function(c){
+          if(r.by[c]>=r.received*0.05) dst.push({id:'c:'+c,label:c,v:r.by[c],cls:'cf-n-sp'});else{small+=r.by[c];few.push(c);}
+        });
+        if(small>0) dst.push({id:'c:Other',label:few.length>1?'Other spending':few[0]||'Other',v:small,cls:'cf-n-sp',more:few});
+      }
+      else if(r.spent>0) dst.push({id:'sp',label:'Spent (not itemised)',v:r.spent,cls:'cf-n-sp'});
+      if(r.left>0) dst.push({id:'lo',label:'Left over',v:r.left,cls:'cf-n-lo'});
+      // links: received pays for things in order, earlier money covers the rest
+      var links=[],avail=src.map(function(s){return {id:s.id,v:s.v};}),si=0;
+      dst.forEach(function(d){var need=d.v;while(need>0.5&&si<avail.length){var take=Math.min(need,avail[si].v);if(take>0) links.push({s:avail[si].id,t:d.id,v:take,cls:d.cls});avail[si].v-=take;need-=take;if(avail[si].v<=0.5) si++;}});
+      var fw=Math.max(280,(box.clientWidth||600)-(box.clientWidth>760?320:0)),labW=fw<520?92:130,fh=Math.max(200,Math.min(380,dst.length*30));
+      var lay=Viz.sankey([src,dst],links,fw-labW*2,fh,{nodeW:10,pad:6});
+      var sv='<svg width="'+fw+'" height="'+(fh+24)+'" viewBox="0 0 '+fw+' '+(fh+24)+'" role="img" aria-label="Where '+esc(ymName(key,true))+' pay went"><g transform="translate('+labW+',3)">';
+      lay.links.forEach(function(l){sv+='<path class="cf-lk '+l.cls+'" d="'+l.d+'" data-tip="'+esc(l.sn.label+' → '+l.tn.label+'\n'+fmt(l.v))+'"/>';});
+      // labels keep at least 24px apart, top to bottom, even when bars are thin
+      var lastY=[-1e9,-1e9];
+      Object.keys(lay.nodes).map(function(id){return lay.nodes[id];}).sort(function(x,y){return x.y-y.y;}).forEach(function(nd){var left=nd.col===0,ty=Math.max(nd.y+nd.h/2,lastY[nd.col]+24);lastY[nd.col]=ty;
+        sv+='<g data-tip="'+esc(nd.label+'\n'+fmt(nd.v)+(nd.more&&nd.more.length>1?'\n'+nd.more.map(function(c){return c+' '+fmt(r.by[c]);}).join('\n'):''))+'"><rect class="nd-r '+nd.cls+'" x="'+Viz.r1(nd.x)+'" y="'+Viz.r1(nd.y)+'" width="'+nd.w+'" height="'+Viz.r1(nd.h)+'" rx="1.5"/>'+
+          '<text class="nd-t" x="'+Viz.r1(left?nd.x-8:nd.x+nd.w+8)+'" y="'+Viz.r1(ty-1)+'" text-anchor="'+(left?'end':'start')+'">'+esc(nd.label)+'</text>'+
+          '<text class="nd-v" x="'+Viz.r1(left?nd.x-8:nd.x+nd.w+8)+'" y="'+Viz.r1(ty+11)+'" text-anchor="'+(left?'end':'start')+'">'+esc(K(nd.v))+'</text></g>';});
+      flow='<div class="cf-flow">'+sv+'</g></svg></div>';
+    }
+    box.innerHTML='<div class="cf-dh"><b>'+esc(ymName(key,true))+'</b>'+(r.kind==='open'?'<span class="pill">so far</span>':r.kind==='partial'?'<span class="pill">spending estimated</span>':r.kind==='untracked'?'<span class="pill">not tracked</span>':'')+'</div><div class="cf-db">'+stats+flow+'</div>';
+  }
+  function saveIncome(btn){
+    var box=btn.closest('[data-cf-month]'),k=box.dataset.cfMonth,inp=$('input',box),v=amt(inp.value),E=window.LedgerEditor;
+    if(v==null||!(v>0)){inp.focus();if(E) E.toast('Enter the amount you received.');return;}
+    btn.disabled=true;
+    (L.hasToken()?Promise.resolve():L.signIn()).then(function(){return L.saveIncome(+k.slice(0,4),+k.slice(5),v);}).then(function(){
+      if(E) E.toast('Saved '+fmt(v)+' as received in '+ymName(k,true)+'.');
+    }).catch(function(e){btn.disabled=false;if(E) E.toast(L.errMsg(e));});
   }
 
   // ---------------------------------------------------------------- savings outlook
