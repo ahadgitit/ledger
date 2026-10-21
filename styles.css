@@ -700,6 +700,7 @@ body.gated .ctx,body.gated .tabs{display:none}
 .fp-seg{display:flex;width:100%}
 .fp-seg button{flex:1;display:grid;gap:2px;padding:7px 8px;font-size:12.5px}
 .fp-seg small{font:500 12px var(--font-num);color:var(--ink)}
+.fp-pred{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}.fp-pred b{font:600 22px var(--font-num);color:var(--ink)}.fp-pred span{font-size:12px;color:var(--ink-2)}
 .fp-hist{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:12px;font-size:11.5px;color:var(--ink-2)}
 .fp-hist .fp-now{color:var(--ink)}.fp-hist b{font:500 11.5px var(--font-num);color:var(--ink)}.fp-hist small{font:10.5px var(--font-num);color:var(--muted)}
 .fp-adv{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;padding:10px 0;border-top:1px solid var(--grid)}

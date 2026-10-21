@@ -18,8 +18,7 @@ var Forecast=(function(){
   function $$(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s));}
   var KEY='ledger.forecast.v3';
   var PEOPLE=[{key:'touheed',label:'Touheed',what:'transport fee',fee:27000},{key:'mama',label:'Mama',what:'groceries',fee:35000}];
-  var RIDE_PRIOR=10;
-  var RIDE_LV=[{k:'low',t:'Low'},{k:'avg',t:'Average'},{k:'high',t:'High'}];
+  var RIDE_HALF=60,RIDE_DISP=0.5,RIDE_SIMS=4000;
   var ESS=[
     {k:'laundry',t:'Laundry',re:/laund|laubdry|dry ?clean/},
     {k:'groom',t:'Grooming and toiletries',re:/razor|blade|gill?ett?e|gellete|shav|groom|deod|shampoo|haircut|body ?wash|tooth|oral ?max/}
@@ -73,10 +72,40 @@ var Forecast=(function(){
     return out;
   }
   function perDay(h,f){return mean(h.map(function(x){return f(x)/x.len;}));}
-  // low / high: the average of the cheaper and of the dearer half of past months
-  function rideLevels(h){
-    var a=h.map(function(x){return x.ride/x.len;}).sort(function(x,y){return x-y;}),n=a.length,half=Math.max(1,Math.floor(n/2));
-    return {low:mean(a.slice(0,half)),avg:mean(a),high:mean(a.slice(n-half))};
+  /* InDrive for the next n days, from your whole ride record since `from`.
+     Rides come in clumps, so the unit is a ride day: how often you have one (ride days per
+     calendar day) and what a ride day costs. Both are weighted by age, halving every 60 days,
+     so recent habits count most and old ones fade out. The number of ride days ahead is a
+     Poisson count whose rate itself wobbles (a busy or quiet stretch, variance 0.5), and each
+     ride day costs one of your past ride days, picked by the same weights. 4000 runs of that;
+     the answer is the middle one, the amount you are as likely to go over as to stay under.
+     Backtested on every day from June to October 2026: off by about 1,300 on average (rides are
+     lumpy, no method did much better) and about 230 too high overall, against 350 for the old
+     blend of this cycle's pace and monthly averages. */
+  function ridePredict(all,from,start,n,seed){
+    var byDay={};
+    Logic.rides([{tx:all}])[0].list.forEach(function(r){if(r.day!=null) byDay[r.day]=(byDay[r.day]||0)+r.amt;});
+    var N=0,K=0,A=0,amts=[],cum=[];
+    for(var d=from;d<start;d++){
+      var w=Math.pow(0.5,(start-d)/RIDE_HALF);N+=w;
+      if(byDay[d]){K+=w;A+=w*byDay[d];amts.push(byDay[d]);cum.push(K);}
+    }
+    var rate=N?K/N:0,perDay=K?A/K:0,mu=rate*n,out=[];
+    if(!amts.length||n<=0) return {amt:0,rate:rate,perDay:perDay,days:n,rideDays:mu,mean:0};
+    var r=rng(seed),sh=1/RIDE_DISP;
+    for(var s=0;s<RIDE_SIMS;s++){
+      var g=0;for(var j=0;j<sh;j++) g-=Math.log(1-r());
+      var m=mu*g/sh,L=Math.exp(-m),k=0,p=r(),tot=0;
+      while(p>L){k++;p*=r();}
+      for(var j2=0;j2<k;j2++){
+        var u=r()*K,lo=0,hi=cum.length-1;
+        while(lo<hi){var mid=(lo+hi)>>1;if(cum[mid]<u) lo=mid+1; else hi=mid;}
+        tot+=amts[lo];
+      }
+      out.push(tot);
+    }
+    out.sort(function(a,b){return a-b;});
+    return {amt:out[out.length>>1],rate:rate,perDay:perDay,days:n,rideDays:mu,mean:mu*perDay};
   }
 
   // ---------------------------------------------------------------- model
@@ -123,19 +152,20 @@ var Forecast=(function(){
     });
     for(var dd=cur.start;dd<=today;dd++) soFar+=fd[dd]||0;
     var food={byDay:fd,items:fi,logged:logged,today:fd[today]||0,soFar:soFar,passed:Math.max(0,today-cur.start),now:today};
-    /* InDrive for the rest of this cycle: your pace so far this cycle, blended with past
-       months. The pace counts for days/(days+10): about a fifth after 3 days, half after
-       10, two thirds after 20, so a couple of rides early on cannot swing it much. */
-    var rc=Logic.rides(cyc)[i],el=Math.max(1,today-cur.start+1),pace=rc.total/el,w=el/(el+RIDE_PRIOR),lvh=rideLevels(h),lvNow={};
-    RIDE_LV.forEach(function(x){lvNow[x.k]=w*pace+(1-w)*lvh[x.k];});
-    var rideNow={total:rc.total,count:rc.count,days:el,pace:pace,w:w};
+    /* InDrive from now to the day before payday. Rides already taken are out of Remaining;
+       when today already has a ride logged, today counts as done and the estimate starts tomorrow. */
+    var rc=Logic.rides(cyc)[i],from=cyc[Math.max(0,i-6)].start;
+    var rodeToday=rc.list.some(function(r){return r.day===today;}),rs=Math.max(today,cur.start)+(rodeToday?1:0);
+    var ride=ridePredict(M.all,from,rs,pay-rs,cur.start);
+    ride.month=ridePredict(M.all,from,rs,Math.round(MDAYS),cur.start+1).amt;
+    var rideNow={total:rc.total,count:rc.count,today:rodeToday,from:rs};
     return {food:food,past:past,cur:cur,id:id,prev:i>0?cyc[i-1]:null,prevAdv:prevId?s.adv[prevId]||null:null,days:days,pay:pay,lastDay:pay-1,
-      remaining:cur.bal.remaining,saved:saved,bills:bills,ess:ess,hist:h,lv:lvh,lvNow:lvNow,rideNow:rideNow,
+      remaining:cur.bal.remaining,saved:saved,bills:bills,ess:ess,hist:h,ride:ride,rideNow:rideNow,
       usual:{food:perDay(h,function(x){return x.food;}),shop:perDay(h,function(x){return x.shop;})}};
   }
   function inputs(R){
     var s=load();
-    return {mode:s.mode==='shop'?'shop':'food',ride:s.ride||'avg',
+    return {mode:s.mode==='shop'?'shop':'food',
       shopCap:s.shopCap!=null?s.shopCap:null,foodCap:s.foodCap!=null?s.foodCap:null,
       adv:s.adv[R.id]||{},fees:s.fees};
   }
@@ -143,7 +173,7 @@ var Forecast=(function(){
   function compute(R,I){
     var bills=R.bills.reduce(function(a,b){return a+(b.on?b.amt:0);},0);
     var ess=R.ess.reduce(function(a,e){return a+(e.amt||0);},0);
-    var ride=r100(R.lvNow[I.ride]*R.days);
+    var ride=r100(R.ride.amt);
     var advIn=0,adv=0;
     PEOPLE.forEach(function(p){var a=I.adv[p.key]||{};adv+=a.amt||0;if(a.logged) advIn+=a.amt||0;});
     // an advance already logged in the sheet lowered Remaining, but it is paid out of Pay myself
@@ -193,8 +223,8 @@ var Forecast=(function(){
     var ess=R.ess.map(function(e){
       return itemRow('ess',e,e.extra?'added by you':'usually '+esc(fmt(e.def))+(e.months<R.hist.length?' · in '+e.months+' of '+R.hist.length+' months':''));
     }).join('');
-    var lv=R.lvNow,rideSeg='<div class="seg fp-seg" role="group" aria-label="InDrive estimate">'+RIDE_LV.map(function(x){
-      return '<button type="button" data-ride="'+x.k+'" aria-pressed="'+(I.ride===x.k)+'">'+x.t+'<small>'+esc(fmt(r100(lv[x.k]*d)))+'</small></button>';}).join('')+'</div>';
+    var RP=R.ride,rd=RP.days,rideBig='<div class="fp-pred"><b>'+esc(fmt(r100(RP.amt)))+'</b><span>most likely on InDrive in the '+rd+' day'+(rd===1?'':'s')+' to payday'+
+      (R.rideNow.today?' (from tomorrow, today’s rides are logged)':'')+'</span></div>';
     var rhist=R.hist.map(function(x){return '<span>'+esc(x.name.slice(0,3))+' <b>'+esc(fmt(x.ride))+'</b></span>';}).join('')+
       '<span class="fp-now">'+esc(R.cur.name.slice(0,3))+' so far <b>'+esc(fmt(R.rideNow.total))+'</b></span>';
     var shist=R.hist.map(function(x){return '<span>'+esc(x.name.slice(0,3))+' <b>'+esc(fmt(x.shop))+'</b></span>';}).join('');
@@ -243,8 +273,8 @@ var Forecast=(function(){
         '<p class="fc-note">You usually spend about '+esc(fmt(R.usual.food))+' a day on food, about '+esc(fmt(usualFood))+' over these '+d+' days. Lighter bars are months with untracked catch-up rows, so they were really higher.</p>',{cls:''})+
       ui.pnl('fp-bills','Bills and subscriptions','tick the ones still to pay',bills+
         '<div class="fp-foot"><button type="button" class="btn sm" data-add="bill">+ Add bill</button><span class="fp-tot">Still to pay <b id="fp-bills-t"></b></span></div>',{cls:''})+
-      ui.pnl('fp-ride','InDrive','your pace this cycle and past months × '+d+' days',rideSeg+'<div class="fp-hist">'+rhist+'</div>'+
-        '<p class="fc-note">This cycle so far: '+esc(fmt(R.rideNow.total))+' in '+R.rideNow.count+' ride'+(R.rideNow.count===1?'':'s')+' over '+R.rideNow.days+' day'+(R.rideNow.days===1?'':'s')+' ('+esc(fmt(R.rideNow.pace))+' a day). That pace counts for '+Math.round(R.rideNow.w*100)+'% of each estimate, more as the cycle goes on; the rest is your past months, where low and high are the averages of your cheaper and dearer months. Rides already taken are out of Remaining.</p>',{cls:''})+
+      ui.pnl('fp-ride','InDrive','predicted from your ride record',rideBig+'<div class="fp-hist">'+rhist+'</div>'+
+        '<p class="fc-note">Lately you take InDrive on about '+(RP.rate*7).toFixed(1)+' days a week, and a ride day costs about '+esc(fmt(r100(RP.perDay)))+'. Recent weeks count most: a ride from two months ago counts half as much as one today. The figure is the middle of 4000 simulated stretches to payday, so you are as likely to spend less as more. Rides already taken this cycle are out of Remaining.</p>',{cls:''})+
       '</div><div class="fp-col">'+
       ui.pnl('fp-shop','Shopping and outfits','clothes, perfume, gifts, gadgets',
         (foodMode?capBox('shop',usualShop):result('shop'))+
@@ -335,7 +365,6 @@ var Forecast=(function(){
       if(c){s.cfSel=c.dataset.cf;save();drawCf();return;}
       var t=e.target.closest('button');if(!t) return;
       if(t.dataset.pmode){if(s.mode!==t.dataset.pmode){s.mode=t.dataset.pmode;save();rerender();}}
-      else if(t.dataset.ride){s.ride=t.dataset.ride;save();$$('[data-ride]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});update();}
       else if(t.dataset.use){
         var box=t.closest('[data-cap]'),inp=$('.fp-total input',box),pd=$('.fp-perday input',box),u=+t.dataset.use;
         inp.value=u.toLocaleString('en-US');if(pd) pd.value=Math.round(u/R.days).toLocaleString('en-US');
@@ -355,7 +384,7 @@ var Forecast=(function(){
       }
       else if(t.id==='fp-reset'){
         if(!confirm('Reset bills, essentials, caps and the InDrive choice to the defaults? Advances stay.')) return;
-        delete s.bills[id];s.ess={};delete s.essExtra;delete s.shopCap;delete s.foodCap;delete s.ride;save();rerender();
+        delete s.bills[id];s.ess={};delete s.essExtra;delete s.shopCap;delete s.foodCap;save();rerender();
       }
     });
     root.addEventListener('keydown',function(e){
@@ -399,7 +428,7 @@ var Forecast=(function(){
       (C.advIn?row('Advances already logged, paid from Pay myself','+'+esc(fmt(C.advIn))):'')+
       row('Bills still to pay',neg(C.bills))+
       row('Monthly essentials',neg(C.ess))+
-      row('InDrive ('+{low:'low',avg:'average',high:'high'}[I.ride]+')',neg(C.ride))+
+      row('InDrive (predicted, '+R.ride.days+' days)',neg(C.ride))+
       (food||C.cap==null?row('Your '+capWhat+' cap',C.cap==null?'<span class="fp-miss">not set</span>':neg(C.cap))
         :row('Food: '+fmt(C.dayLimit)+' a day \u00d7 '+d+' days'+(C.foodToday?', less '+fmt(C.foodToday)+' already spent today':''),neg(C.need)))+
       row('Left for '+what,C.left==null?'–':esc(fmtS(C.left)),'tot'+(C.left!=null&&C.left<0?' neg':''))+
@@ -683,7 +712,7 @@ var Forecast=(function(){
     var parts={
       food:!food&&I.foodCap!=null?I.foodCap*k:R.usual.food*MDAYS,
       shop:food&&I.shopCap!=null?I.shopCap*k:R.usual.shop*MDAYS,
-      ess:C.ess*k,ride:R.lv[I.ride]*MDAYS};
+      ess:C.ess*k,ride:R.ride.month};
     var fee=function(p){return I.fees[p.key]!=null?I.fees[p.key]:p.fee;};
     return {bills:bills,parts:parts,variable:parts.food+parts.shop+parts.ess+parts.ride,
       mama:fee(PEOPLE[1]),touheed:fee(PEOPLE[0]),
