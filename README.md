@@ -120,7 +120,7 @@ python3 -m http.server 8000
     - **Shopping limit:** the most you try to spend on shopping in a month (your usual by default). Each month's shopping is drawn at random against it, mostly 40% to 100% of the limit and about one month in ten a little over, so the forecast varies month to month like real life. The month-by-month table shows one such month for each.
     - **Each month's spending** comes from this month's plan (the budget above it): bills, essentials, InDrive, and your food or shopping cap (your usual where no cap is set), scaled to a month. Mama and Touheed are paid on top, less any advance in the first month.
     - **The range:** 3,000 simulated futures resample how much your past months' everyday spending ran over or under average, and add surprise one-off buys of Rs 10,000+ as often and as big as they have happened. You can turn surprise buys off. Any shortfall this month comes out of the starting balance first.
-    - A month-by-month table lists salary, payments, spending, planned expenses and the likely balance.
+    - A month-by-month table lists salary, payments, spending, planned expenses and the likely balance. Hovering a future month on the chart lists that month's expected spending item by item: groceries to Mama, transport to Touheed, food, laundry, toiletries, InDrive, shopping, bills, any planned expense, and an allowance for ups, downs and surprise buys.
 
   What you enter is kept in your browser.
 - **Ctrl/Cmd + K** opens a command palette to jump to views, actions, items and transactions.

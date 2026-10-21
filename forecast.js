@@ -819,8 +819,15 @@ var Forecast=(function(){
           (i===s0?'<br>Likely '+esc(fmt(r100(S.start.bal)))+' by '+esc(fmtDay(R.lastDay))+(S.start.dip<0?', after this month’s shortfall':''):'')+'</div>';
       }else if(i===s0){cy=Y(S.start.bal);h='<div class="tt-h">Now</div><div class="tt-b">Pay myself '+esc(fmt(S.start.bal))+'</div>';}
       else{var j=i-s0-1,r=rows[j],b=B[j];cy=Y(b.p50);
-        h='<div class="tt-h">End of '+esc(r.m.name+' '+r.m.year)+' cycle</div><div class="tt-b">Likely '+esc(fmt(r100(b.p50)))+'<br>Range '+esc(fmt(r100(b.p10)))+' – '+esc(fmt(r100(b.p90)))+
-        '<br>Salary '+esc(fmt(r.salary))+' · shopping '+esc(fmt(r.shop))+' · saved about '+esc(fmtS(r100(r.saveP50)))+(r.planned?'<br>Planned: '+esc(fmt(r.planned)):'')+'</div>';}
+        // that month's expected spending, item by item (the same plan the forecast uses)
+        var k=MDAYS/R.days,f=S.lv,items=[['Groceries (to Mama)',r.mama],['Transport (to Touheed)',r.touheed],['Food',P.parts.food*f]]
+          .concat(R.ess.map(function(e){return [e.key==='groom'?'Toiletries':e.label||'Other',(e.amt||0)*k*f];}))
+          .concat([['InDrive',P.parts.ride*f],['Shopping',r.shop],['Bills and subscriptions',r.bills]]).concat(r.planned?[['Planned expense',r.planned]]:[]);
+        var tot=items.reduce(function(a2,x){return a2+x[1];},0);
+        h='<div class="tt-h">'+esc(r.m.name+' '+r.m.year)+' cycle</div><div class="tt-b">Pay myself likely '+esc(fmt(r100(b.p50)))+' <span class="tt-r">('+esc(K(b.p10))+'\u2013'+esc(K(b.p90))+')</span><br>Salary '+esc(fmt(r.salary))+'</div>'+
+          '<dl class="tt-g">'+items.filter(function(x){return x[1]>0;}).map(function(x){return '<dt>'+esc(x[0])+'</dt><dd>'+esc(fmt(r100(x[1])))+'</dd>';}).join('')+
+          (Math.abs(r.salary-tot-r.saveP50)>=100?'<dt>'+(r.salary-tot-r.saveP50>0?'Ups and downs, surprise buys':'Likely a bit under plan')+'</dt><dd>'+esc(fmtS(r100(r.salary-tot-r.saveP50)))+'</dd>':'')+
+          '<dt class="tt-t">Expenses</dt><dd class="tt-t">'+esc(fmt(r100(r.salary-r.saveP50)))+'</dd><dt class="tt-t">Saved about</dt><dd class="tt-t">'+esc(fmtS(r100(r.saveP50)))+'</dd></dl>';}
       cross.setAttribute('x1',cx);cross.setAttribute('x2',cx);cross.removeAttribute('hidden');
       hov.setAttribute('cx',cx);hov.setAttribute('cy',cy.toFixed(1));hov.removeAttribute('hidden');
       if(UIref) UIref.showTip(h,e.clientX,e.clientY);
