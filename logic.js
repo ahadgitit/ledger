@@ -286,6 +286,38 @@ const Logic=(function(){
       return {list:list,total:total,count:list.length,office:office,officeN:officeN};
     });
   }
+  /* Rides Touheed should have given: weekday InDrive rides between home and office, plus any
+     ride noted "absent" (Touheed did not come). Rides noted "weekend", or on a Saturday or
+     Sunday, are not his. Grouped by his pay periods, the 15th to the 14th of the next month. */
+  function touheedSkips(all,today){
+    const list=[];let first=null;
+    all.forEach(function(t){
+      const r=rideOf(t);
+      if(!r||r.day==null) return;
+      if(first==null||r.day<first) first=r.day;
+      const wd=(r.day+4)%7;
+      if(r.tags.indexOf('Weekend')>=0) return;
+      const absent=r.tags.indexOf('Touheed absent')>=0;
+      const ends=[r.from,r.to].map(function(x){return x.toLowerCase();});
+      const office=ends.some(function(x){return /^office\b/.test(x);});
+      const homeOk=ends.every(function(x){return !x||/^(office|home|house|my house)\b/.test(x);});
+      if(absent||(wd!==0&&wd!==6&&office&&homeOk)) list.push(r);
+    });
+    if(first==null) return [];
+    function startOf(day){
+      const d=new Date(day*DAY);let y=d.getUTCFullYear(),m=d.getUTCMonth();
+      if(d.getUTCDate()<15){m--;if(m<0){m=11;y--;}}
+      return {y:y,m:m,day:Math.round(Date.UTC(y,m,15)/DAY)};
+    }
+    const out=[];let s=startOf(Math.max(first,startOf(today).day-400)),end=startOf(today).day;
+    while(s.day<=end){
+      const ny=s.m===11?s.y+1:s.y,nm=(s.m+1)%12,next=Math.round(Date.UTC(ny,nm,15)/DAY);
+      const rides=list.filter(function(r){return r.day>=s.day&&r.day<next;}).sort(function(a,b){return a.day-b.day;});
+      out.push({start:s.day,end:next-1,label:MON[s.m],name:'15 '+MON[s.m]+' – 14 '+MON[nm],rides:rides,count:rides.length,current:today>=s.day&&today<next});
+      s={y:ny,m:nm,day:next};
+    }
+    return out;
+  }
   function readAll(call,onCount){
     function readRows(s,e){
       return call('Tracking!A'+s+':G'+e).then(function(rows){
@@ -303,5 +335,5 @@ const Logic=(function(){
       return Promise.all(jobs).then(function(parts){return [].concat.apply([],parts);});
     });
   }
-  return {num:num,parseDate:parseDate,todayNum:todayNum,parseTracking:parseTracking,cyclePeriods:cyclePeriods,monthPeriods:monthPeriods,aggregate:aggregate,parseIncome:parseIncome,readAll:readAll,subscriptions:subscriptions,subKey:subKey,rides:rides,normMode:normMode,CAT_KEY:CAT_KEY,isHeading:isHeading,foodBudget:foodBudget,PAYDAY_DOM:PAYDAY_DOM,BUFFER:BUFFER,CATS:CATS,MON:MON,DAY:DAY};
+  return {num:num,parseDate:parseDate,todayNum:todayNum,parseTracking:parseTracking,cyclePeriods:cyclePeriods,monthPeriods:monthPeriods,aggregate:aggregate,parseIncome:parseIncome,readAll:readAll,subscriptions:subscriptions,subKey:subKey,rides:rides,touheedSkips:touheedSkips,normMode:normMode,CAT_KEY:CAT_KEY,isHeading:isHeading,foodBudget:foodBudget,PAYDAY_DOM:PAYDAY_DOM,BUFFER:BUFFER,CATS:CATS,MON:MON,DAY:DAY};
 })();

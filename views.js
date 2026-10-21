@@ -204,7 +204,7 @@
       compositionPanel()+deltaPanel()+
       pnl('p-heat','Activity','Daily spend, last 22 weeks','<div id="heat"></div>',{cls:'s8'})+
       railsPanel()+
-      ridesPanel()+largestPanel()+
+      ridesPanel()+largestPanel()+touheedPanel()+
       '</div>'+notes();
     return html;
   }
@@ -314,6 +314,33 @@
         '<div><span>Avg fare</span><b>'+(R.count?esc(fmt(R.total/R.count)):'–')+'</b></div><div><span>Office trips</span><b>'+R.officeN+'</b></div>'+
         '<div><span>Share of transport</span><b>'+((M.A.by['InDrive']||0)+(M.A.by['Transport']||0)>0?pct(R.total,(M.A.by['InDrive']||0)+(M.A.by['Transport']||0))+'%':'–')+'</b></div></div></div>'+
       (rows?'<ul class="rlist">'+rows+'</ul>':'<div class="empty">No rides this '+M.unit+'.</div>'),{cls:'s6'});
+  }
+  // InDrive rides Touheed should have given, at his per-ride rate
+  var TOUHEED_RATE=650;
+  function touheedPanel(){
+    var P=Logic.touheedSkips(M.all,M.today);
+    if(!P.length) return '';
+    var cur=P[P.length-1],n=P.reduce(function(a,p){return a+p.count;},0);
+    var rows=cur.rides.slice().reverse().map(function(r){
+      var route=r.from&&r.to?r.from+' → '+r.to:r.to?'→ '+r.to:r.from?r.from+' →':'Office trip';
+      return '<li><span class="rd-d">'+esc(fmtDay(r.day))+'</span><span class="rd-r">'+esc(route)+r.tags.map(function(g){return '<em>'+esc(g)+'</em>';}).join('')+'</span><span class="rd-v">'+esc(fmt(TOUHEED_RATE))+'</span></li>';
+    }).join('');
+    var avg=P.length>1?P.slice(0,-1).reduce(function(a,p){return a+p.count;},0)/(P.length-1):null;
+    return pnl('p-touheed','Rides Touheed skipped','home ↔ office on weekdays · '+esc(fmt(TOUHEED_RATE))+' a ride',
+      '<div class="rides"><div class="rides-c"><div id="touheed-chart"></div></div><div class="rides-s">'+
+        '<div><span>'+esc(cur.name)+'</span><b>'+cur.count+' · '+esc(fmt(cur.count*TOUHEED_RATE))+'</b></div>'+
+        (avg!=null?'<div><span>Average a period</span><b>'+avg.toFixed(1)+' · '+esc(fmt(avg*TOUHEED_RATE))+'</b></div>':'')+
+        '<div><span>All periods</span><b>'+n+' · '+esc(fmt(n*TOUHEED_RATE))+'</b></div></div></div>'+
+      (rows?'<ul class="rlist">'+rows+'</ul>':'<div class="empty">No skipped rides since the 15th.</div>')+
+      '<p class="fc-note">Counts InDrive rides between home and office on weekdays, and any ride you noted "absent". Rides noted "weekend" are left out. Each is valued at '+esc(fmt(TOUHEED_RATE))+', not what the InDrive cost.</p>',{cls:'s12'});
+  }
+  function drawTouheed(){
+    var el=$('#touheed-chart');
+    if(!el) return;
+    cols(el,Logic.touheedSkips(M.all,M.today).slice(-12).map(function(p){
+      return {v:p.count*TOUHEED_RATE,xl:p.label,top:p.count?String(p.count):'',cls:p.current?'bar-cur':'bar-n',
+        tip:p.name+'\n'+p.count+(p.count===1?' ride':' rides')+' × '+fmt(TOUHEED_RATE)+' = '+fmt(p.count*TOUHEED_RATE)+(p.rides.length?'\n'+p.rides.map(function(r){return fmtDay(r.day);}).join(', '):'')};
+    }),140);
   }
   function largestPanel(){
     var top=M.A.top.filter(function(t){return t.amt>0;}).sort(function(a,b){return b.amt-a.amt;}).slice(0,8);
@@ -498,6 +525,7 @@
       var cx=m.l+slot*i+slot/2,hh=it.v>0?Math.max(2,it.v/mx*ph):0;
       s+=Viz.bar(cx-bw/2,m.t+ph,bw,hh,it.cls)+'<rect x="'+(m.l+slot*i)+'" y="'+m.t+'" width="'+slot+'" height="'+ph+'" fill="transparent" data-tip="'+esc(it.tip)+'"/>';
       s+='<text class="tick" x="'+cx+'" y="'+(H-4)+'" text-anchor="middle">'+esc(it.xl)+'</text>';
+      if(it.top) s+='<text class="tick" x="'+cx+'" y="'+(m.t+ph-hh-4)+'" text-anchor="middle">'+esc(it.top)+'</text>';
     });
     el.innerHTML=s+'</svg>';
   }
@@ -798,7 +826,7 @@
     if(U.view==='forecast'&&window.Forecast){v.innerHTML=Forecast.view(M,UI);Forecast.draw(UI);}
     else if(U.view==='flows'){v.innerHTML=flows();drawSankey();}
     else if(U.view==='explorer'){v.innerHTML=explorer();exTable();}
-    else{v.innerHTML=overview();drawTrajectory();drawTree();drawHeat();drawRides();}
+    else{v.innerHTML=overview();drawTrajectory();drawTree();drawHeat();drawRides();drawTouheed();}
     window.scrollTo(0,y);
   }
 
