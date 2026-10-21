@@ -146,7 +146,7 @@ var Forecast=(function(){
     var need=cap==null?null:I.mode==='food'?cap:Math.max(0,cap-ft);
     var left=need==null?null:base-need;
     var dayLimit=I.mode==='food'?(left==null?null:(left+ft)/R.days):(cap==null?null:cap/R.days);
-    return {need:need,dayLimit:dayLimit,foodToday:ft,money:money,advIn:advIn,adv:adv,bills:bills,ess:ess,ride:ride,base:base,cap:cap,left:left,kept:R.saved-adv};
+    return {need:need,dayLimit:dayLimit,foodToday:ft,money:money,advIn:advIn,adv:adv,bills:bills,ess:ess,ride:ride,base:base,cap:cap,left:left,kept:R.saved};
   }
 
   // ---------------------------------------------------------------- view
@@ -250,7 +250,7 @@ var Forecast=(function(){
         '<p>Remaining comes from column G of '+esc(R.cur.name)+', with your Pay myself already set aside. Payday is taken as the 20th, the latest you usually get paid, so this covers '+d+' days, today to '+esc(until)+'.</p>'+
         '<p>Bills you tick, your monthly essentials and InDrive are taken off. Paid bills are already out of Remaining, so they start unticked. Essentials and InDrive start at your average per day over your last '+R.hist.length+' full months, times the days left.</p>'+
         '<p>Predict food: your shopping cap is taken off too, and what is left is for food. Predict shopping: your food cap is taken off, and what is left is for shopping.</p>'+
-        '<p>An advance to Touheed or Mama is paid out of Pay myself, so it lowers what you keep this month but not this budget, and at the next payday you owe that much less. If you already logged it in the sheet, Remaining went down by it, so it is added back here.</p>'+
+        '<p>An advance to Touheed or Mama is paid out of Pay myself: lower Pay myself in the sheet when you pay it. It does not touch this budget, and at the next payday you owe that much less, which the savings outlook counts as saved. If you also logged the advance as an entry, Remaining went down by it, so it is added back here.</p>'+
         '<p>What you enter here is kept in this browser.</p></details>'+
       cfView(M)+outlookView()+
     '</div>';
@@ -395,7 +395,7 @@ var Forecast=(function(){
       (food||C.cap==null?row('Your '+capWhat+' cap',C.cap==null?'<span class="fp-miss">not set</span>':neg(C.cap))
         :row('Food: '+fmt(C.dayLimit)+' a day \u00d7 '+d+' days'+(C.foodToday?', less '+fmt(C.foodToday)+' already spent today':''),neg(C.need)))+
       row('Left for '+what,C.left==null?'–':esc(fmtS(C.left)),'tot'+(C.left!=null&&C.left<0?' neg':''))+
-      row('Pay myself kept'+(C.adv?', after '+fmt(C.adv)+' in advances (back next payday)':''),esc(fmt(C.kept)));
+      row('Pay myself (as in the sheet)'+(C.adv?'; the '+fmt(C.adv)+' advance comes back next payday':''),esc(fmt(C.kept)));
     $('#fp-bills-t').textContent=fmt(C.bills);
     $('#fp-ess-t').textContent=fmt(C.ess);
     // the predicted side
