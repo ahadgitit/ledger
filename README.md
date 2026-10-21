@@ -97,7 +97,7 @@ python3 -m http.server 8000
 - **Flows** is a money-flow diagram from account to category to item, with money in and transfers between accounts.
 - **Explorer** is an object browser for transactions and items. It has facets (category, payment mode, amount, scope), sortable columns, and an inspector that shows each object's properties, linked item, history and a link to its row in the sheet.
 - **Forecast** is a budget for the rest of the current payday cycle (today until the 20th of next month, the latest payday) that answers: can this month's **Pay myself** stay untouched?
-  - **Predict food or shopping.** To predict food, you must set a shopping cap. To predict shopping, you must set a food cap. Neither has a default; a button fills in your usual amount if you want it.
+  - **Predict food or shopping.** To predict food, you must set a shopping cap. To predict shopping, you must set a food cap, either as a total or as a daily limit until payday (the other figure fills in). Neither has a default; a button fills in your usual amount if you want it.
   - **Food graph**: what you spent on food in each past month. A dashed line marks your food cap, or the food budget it predicts.
   - **Bills and subscriptions** (Claude, internet, Amazon, foodpanda, YouTube, and any you add): amounts are editable and start from what you last paid. Tick the ones still to pay.
   - **Monthly essentials** (laundry, grooming and toiletries, and any you add): each starts at your average for this many days over past months, and each can be edited.

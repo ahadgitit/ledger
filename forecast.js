@@ -194,8 +194,11 @@ var Forecast=(function(){
       if(prev) prev='<ul class="fp-prev">'+prev+'</ul>';
     }
     var capBox=function(which,usual){
-      return '<div class="fp-cap" data-cap="'+which+'"><div class="fld"><span class="lbl">Your '+(which==='food'?'food':'shopping')+' cap until '+esc(until)+' <em>required</em></span>'+
-        money(I[which+'Cap'],'','Enter a cap')+'</div>'+
+      var cap=I[which+'Cap'],food=which==='food';
+      // the food cap can also be set as a daily limit until payday
+      return '<div class="fp-cap'+(food?' fp-cap2':'')+'" data-cap="'+which+'"><div class="fld"><span class="lbl">'+(food?'Food':'Your shopping')+' cap until '+esc(until)+' <em>required</em></span>'+
+        money(cap,'fp-total','Enter a cap')+'</div>'+
+        (food?'<div class="fld"><span class="lbl">Or per day</span>'+money(cap==null?null:Math.round(cap/d),'fp-perday','Per day')+'</div>':'')+
         '<button type="button" class="btn sm fp-use" data-use="'+usual+'">Use my usual, '+esc(fmt(usual))+'</button>'+
         '<p class="fp-capd" data-capd="'+which+'"></p></div>';
     };
@@ -277,7 +280,11 @@ var Forecast=(function(){
         var x=R.ess.find(function(y){return y.key===row.dataset.ess;});
         if(isLbl) x.label=t.value;else x.amt=v||0;
         storeEss(x);
-      }else if(row.dataset.cap){s[row.dataset.cap+'Cap']=v;}
+      }else if(row.dataset.cap){
+        var other;
+        if(t.closest('.fp-perday')){s.foodCap=v==null?null:v*R.days;other=$('.fp-total input',row);if(other) other.value=v==null?'':(v*R.days).toLocaleString('en-US');}
+        else{s[row.dataset.cap+'Cap']=v;other=$('.fp-perday input',row);if(other) other.value=v==null?'':Math.round(v/R.days).toLocaleString('en-US');}
+      }
       else{
         var a=adv(row.dataset.adv);
         if(t.type==='checkbox') a.logged=t.checked;
@@ -300,8 +307,9 @@ var Forecast=(function(){
       if(t.dataset.pmode){if(s.mode!==t.dataset.pmode){s.mode=t.dataset.pmode;save();rerender();}}
       else if(t.dataset.ride){s.ride=t.dataset.ride;save();$$('[data-ride]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});update();}
       else if(t.dataset.use){
-        var box=t.closest('[data-cap]'),inp=$('input',box),u=+t.dataset.use;
-        inp.value=u.toLocaleString('en-US');s[box.dataset.cap+'Cap']=u;save();update();
+        var box=t.closest('[data-cap]'),inp=$('.fp-total input',box),pd=$('.fp-perday input',box),u=+t.dataset.use;
+        inp.value=u.toLocaleString('en-US');if(pd) pd.value=Math.round(u/R.days).toLocaleString('en-US');
+        s[box.dataset.cap+'Cap']=u;save();update();
       }
       else if(t.dataset.level){s.level=t.dataset.level;save();$$('[data-level]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});update();}
       else if(t.dataset.hz){s.hz=+t.dataset.hz;save();$$('[data-hz]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});update();}
@@ -367,7 +375,7 @@ var Forecast=(function(){
     pv.classList.toggle('neg',C.left!=null&&C.left<=0);pv.classList.toggle('miss',C.left==null);
     $('#fp-pred-d').textContent=C.left!=null&&C.left>0?fmt(C.left/d)+' a day':'';
     var cd=$('[data-capd]');
-    if(cd) cd.textContent=C.cap!=null?fmt(C.cap/d)+' a day over '+d+' days':'';
+    if(cd) cd.textContent=C.cap==null?'':cd.dataset.capd==='food'?fmt(C.cap)+' over '+d+' days, today to '+fmtDay(R.lastDay)+'.':fmt(C.cap/d)+' a day over '+d+' days';
     // the line on the food chart: your food cap, or the food budget it predicts
     var line=$('#fp-capline'),mx=+$('#fp-fchart').dataset.max,fv=food?C.left:C.cap;
     line.hidden=!(fv>0);

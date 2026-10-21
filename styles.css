@@ -761,6 +761,8 @@ body.gated .ctx,body.gated .tabs{display:none}
 .fp-capd{grid-column:1/-1;margin:0;font:12px var(--font-num);color:var(--ink-2)}
 .fp-capd:empty{display:none}
 .fp-use{height:38px}
+.fp-cap2{grid-template-columns:1fr 1fr}
+.fp-cap2 .fp-use{justify-self:start;height:30px}
 .fp-pred{display:grid;gap:3px;padding:2px 0 14px;margin-bottom:12px;border-bottom:1px solid var(--grid)}
 .fp-pred b{font:600 26px/1.2 var(--font-ui);color:var(--ink)}
 .fp-pred b.neg{color:var(--critical)}.fp-pred b.miss{font-size:15px;color:var(--warning);font-weight:500}
