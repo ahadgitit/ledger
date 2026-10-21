@@ -278,6 +278,8 @@ var Forecast=(function(){
         if(o.dataset.out==='base') s.base=ov;
         else if(o.dataset.out==='next') s.next=ov==null?null:{id:id,amt:ov};
         else if(o.dataset.out==='shop') s.shopLimit=ov;
+        else if(o.dataset.out==='lumplim') s.lumpLimit=ov;
+        else if(o.dataset.out==='groom') s.groomAlt=t.checked;
         else s.lumps=t.checked;
         save();update();return;
       }
@@ -663,7 +665,8 @@ var Forecast=(function(){
   function oInputs(){
     var s=load();
     return {base:s.base!=null?s.base:130000,next:s.next&&s.next.id===R.id?s.next.amt:null,
-      level:s.level||'same',hz:s.hz===12?12:6,lumps:s.lumps!==false,planned:s.planned||[],shopLimit:s.shopLimit!=null?s.shopLimit:null};
+      level:s.level||'same',hz:s.hz===12?12:6,lumps:s.lumps!==false,planned:s.planned||[],shopLimit:s.shopLimit!=null?s.shopLimit:null,
+      lumpLimit:s.lumpLimit!=null?s.lumpLimit:null,groomAlt:s.groomAlt!==false};
   }
   // one month of spending, from this month's plan
   function monthPlan(I,C){
@@ -706,23 +709,34 @@ var Forecast=(function(){
     var ratios=per.map(function(v){return v/avg;});
     var lumps=[];R.hist.forEach(function(x){lumps=lumps.concat(x.lumps);});
     var lam=O.lumps?lumps.length/R.hist.length:0;
+    // with a limit of your own, a surprise month costs a random amount up to it, as often as they have happened
+    var pSurprise=1-Math.exp(-lam),lumpLim=O.lumps&&O.lumpLimit>0?O.lumpLimit:null;
+    var surprise=function(r){
+      if(lumpLim!=null) return r()<pSurprise?lumpLim*(0.3+0.7*r()):0;
+      var l=0,n=poisson(lam,r);for(var k=0;k<n;k++) l+=lumps[Math.floor(r()*lumps.length)];return l;
+    };
+    // toiletries every other month: counted from the last cycle you bought them
+    var g=(R.ess.filter(function(e){return e.key==='groom';})[0]||{}).amt||0,gMonth=g*MDAYS/R.days*lv,since=1;
+    var grRe=ESS.filter(function(e){return e.k==='groom';})[0].re;
+    if(R.cur.tx.some(function(t){return t.amt>0&&grRe.test((t.name+' '+t.desc).toLowerCase());})) since=0;
+    else for(var hi=R.hist.length-1;hi>=0;hi--){if(R.hist[hi].ess.groom>0){since=R.hist.length-hi;break;}}
     // one realistic shopping figure per month for the table, the same each time you look
     var rt=rng(R.id*17+7);
     var rows=M.map(function(m,i){
       var sal=i===0&&O.next!=null?O.next:O.base;
       var mama=Math.max(0,P.mama-(i===0?advM:0)),tou=Math.max(0,P.touheed-(i===0?advT:0));
       var shop=r100(drawShop(limit,rt));
-      return {m:m,salary:sal,mama:mama,touheed:tou,bills:P.bills,spend:other,shop:shop,planned:plan[m.ym]||0,
-        save:sal-mama-tou-P.bills-other-shop-(plan[m.ym]||0)};
+      var groom=!O.groomAlt||(since+i+1)%2===0?gMonth:0,spend=other-gMonth+groom;
+      return {m:m,salary:sal,mama:mama,touheed:tou,bills:P.bills,spend:spend,groom:groom,shop:shop,planned:plan[m.ym]||0,
+        save:sal-mama-tou-P.bills-spend-shop-(plan[m.ym]||0)};
     });
-    var planMonthly=O.base-P.mama-P.touheed-P.bills-other-shopMean(limit);
+    var planMonthly=O.base-P.mama-P.touheed-P.bills-other+(O.groomAlt?gMonth/2:0)-shopMean(limit);
     var r=rng(R.id*31+H),paths=[];for(var j=0;j<H;j++) paths.push([]);
     var saves=[];for(var j2=0;j2<H;j2++) saves.push([]);
     for(var s=0;s<OSIMS;s++){
       var bal=st0.bal;
       for(var i=0;i<H;i++){
-        var row=rows[i],v=row.spend*ratios[Math.floor(r()*ratios.length)],l=0,n=poisson(lam,r);
-        for(var k=0;k<n;k++) l+=lumps[Math.floor(r()*lumps.length)];
+        var row=rows[i],v=row.spend*ratios[Math.floor(r()*ratios.length)],l=surprise(r);
         var sv=row.salary-row.mama-row.touheed-row.bills-v-drawShop(limit,r)-l-row.planned;
         bal+=sv;paths[i].push(bal);saves[i].push(sv);
       }
@@ -730,7 +744,7 @@ var Forecast=(function(){
     var asc=function(a,b){return a-b;};
     var band=paths.map(function(a){a.sort(asc);return {p10:q(a,0.1),p25:q(a,0.25),p50:q(a,0.5),p75:q(a,0.75),p90:q(a,0.9)};});
     saves.forEach(function(a,i){a.sort(asc);rows[i].saveP50=q(a,0.5);});
-    return {O:O,P:P,lv:lv,rows:rows,band:band,start:st0,lam:lam,lumpAvg:lumps.length?mean(lumps):0,spread:ratios,limit:limit,planMonthly:planMonthly};
+    return {O:O,P:P,lv:lv,rows:rows,band:band,start:st0,lam:lam,pSurprise:pSurprise,lumpLim:lumpLim,lumpAvg:lumps.length?mean(lumps):0,spread:ratios,limit:limit,planMonthly:planMonthly};
   }
 
   function outlookView(){
@@ -755,7 +769,9 @@ var Forecast=(function(){
       '<div class="ol-chart" id="ol-chart"></div>'+
       '<div class="legend sm"><span><i class="sw ol-actsw"></i>Recorded Pay myself</span><span><i class="sw c1"></i>Most likely</span><span><i class="sw ol-bandsw"></i>Likely range (8 in 10 futures)</span><span><i class="sw ol-plansw"></i>Planned expense</span></div>'+
       '<p class="ol-month" id="ol-hist"></p><p class="ol-month" id="ol-month"></p>'+
-      '<div class="ol-sub"><div class="ol-subh"><span class="lbl">Planned expenses</span><label class="fp-logged ol-lumps" data-out="lumps"><input type="checkbox"'+(O.lumps?' checked':'')+'> Allow for surprise buys</label></div>'+
+      '<div class="ol-sub"><div class="ol-subh"><span class="lbl">Planned and surprise expenses</span><label class="fp-logged ol-lumps" data-out="lumps"><input type="checkbox"'+(O.lumps?' checked':'')+'> Allow for surprise buys</label></div>'+
+        '<div class="ol-opts"><div class="fld" data-out="lumplim"><span class="lbl">Surprise buys limit a month</span>'+money(O.lumpLimit,'','From your history')+'</div>'+
+          '<label class="fp-logged" data-out="groom"><input type="checkbox"'+(O.groomAlt?' checked':'')+'> Toiletries every other month</label></div>'+
         planned+'<div class="fp-foot"><button type="button" class="btn sm" data-add="plan">+ Add planned expense</button><span class="fp-tot" id="ol-lumpnote"></span></div></div>'+
       '<details class="notes ol-tbl"><summary>Month by month</summary><div class="tbl-w"><table class="tbl" id="ol-table"></table></div></details>'+
     '</div></section>';
@@ -777,7 +793,7 @@ var Forecast=(function(){
       ' − food '+esc(fmt(r100(P.parts.food*S.lv)))+' ('+P.foodSrc+') − shopping up to '+esc(fmt(S.limit))+' (it varies month to month, see the table) − essentials '+esc(fmt(r100(P.parts.ess*S.lv)))+' − InDrive '+esc(fmt(r100(P.parts.ride*S.lv)))+
       ' = <b>'+esc(fmtS(r100(monthly+0)))+'</b> saved'+(S.start.dip<0?'. This month’s shortfall of about '+esc(fmt(r100(-S.start.dip)))+' comes out first.':'.');
     var sh=$('#ol-shop-hint');if(sh) sh.textContent=(O.shopLimit==null?'Using your usual, '+fmt(S.limit)+'. ':'')+'Most months land at '+K(S.limit*0.4)+'\u2013'+K(S.limit)+', now and then a little over.';
-    $('#ol-lumpnote').textContent=O.lumps&&S.lam>0?'Surprise buys of Rs 10,000+: about '+(Math.round(S.lam*10)/10)+' a month, '+K(S.lumpAvg)+' each':'';
+    $('#ol-lumpnote').textContent=!O.lumps||!(S.lam>0)?'':S.lumpLim!=null?'A surprise month about '+Math.round(S.pSurprise*10)+' in 10 months, up to '+K(S.lumpLim)+' each':'Surprise buys of Rs 10,000+: about '+(Math.round(S.lam*10)/10)+' a month, '+K(S.lumpAvg)+' each (from your history)';
     // chart: recorded Pay myself for past cycles, then the projection from this cycle on
     var past=R.past,A=past.length,isCur=A>0&&past[A-1].day===R.cur.start,s0=isCur?A-1:A,N=s0+H;
     var W=Math.max(280,box.clientWidth),Hh=W<520?220:260,pl=46,pr=14,pt=14,pb=28,iw=W-pl-pr,ih=Hh-pt-pb;
@@ -821,7 +837,7 @@ var Forecast=(function(){
       else{var j=i-s0-1,r=rows[j],b=B[j];cy=Y(b.p50);
         // that month's expected spending, item by item (the same plan the forecast uses)
         var k=MDAYS/R.days,f=S.lv,items=[['Groceries (to Mama)',r.mama],['Transport (to Touheed)',r.touheed],['Food',P.parts.food*f]]
-          .concat(R.ess.map(function(e){return [e.key==='groom'?'Toiletries':e.label||'Other',(e.amt||0)*k*f];}))
+          .concat(R.ess.map(function(e){return [e.key==='groom'?'Toiletries':e.label||'Other',e.key==='groom'?r.groom:(e.amt||0)*k*f];}))
           .concat([['InDrive',P.parts.ride*f],['Shopping',r.shop],['Bills and subscriptions',r.bills]]).concat(r.planned?[['Planned expense',r.planned]]:[]);
         var tot=items.reduce(function(a2,x){return a2+x[1];},0);
         h='<div class="tt-h">'+esc(r.m.name+' '+r.m.year)+' cycle</div><div class="tt-b">Pay myself likely '+esc(fmt(r100(b.p50)))+' <span class="tt-r">('+esc(K(b.p10))+'\u2013'+esc(K(b.p90))+')</span><br>Salary '+esc(fmt(r.salary))+'</div>'+

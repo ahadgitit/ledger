@@ -747,6 +747,7 @@ body.gated .ctx,body.gated .tabs{display:none}
 .ol-subh{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 .ol-subh .lbl{font:600 10px var(--font-ui);text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
 .ol-lumps{grid-column:auto}
+.ol-opts{display:flex;align-items:end;gap:12px 24px;flex-wrap:wrap;margin:10px 0 4px}.ol-opts .fld{min-width:220px}.ol-opts .fp-in{display:flex}.ol-opts .fp-in input{width:100%}.ol-opts .fp-logged{padding-bottom:8px}
 .ol-plan select{flex:0 0 auto;width:auto;padding:6px 8px;color-scheme:dark;font:12.5px var(--font-ui);color:var(--ink);background:var(--raise);border:1px solid var(--line-2);border-radius:var(--r)}
 .ol-plan .fp-lbl{width:100%}
 .ol-tbl .tbl{margin-top:8px}.ol-tbl .tbl td{padding:6px 10px 6px 0;border-bottom:1px solid var(--grid);white-space:nowrap}
