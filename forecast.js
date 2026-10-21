@@ -732,18 +732,18 @@ var Forecast=(function(){
     });
     var planMonthly=O.base-P.mama-P.touheed-P.bills-other+(O.groomAlt?gMonth/2:0)-shopMean(limit);
     var r=rng(R.id*31+H),paths=[];for(var j=0;j<H;j++) paths.push([]);
-    var saves=[];for(var j2=0;j2<H;j2++) saves.push([]);
     for(var s=0;s<OSIMS;s++){
       var bal=st0.bal;
       for(var i=0;i<H;i++){
         var row=rows[i],v=row.spend*ratios[Math.floor(r()*ratios.length)],l=surprise(r);
         var sv=row.salary-row.mama-row.touheed-row.bills-v-drawShop(limit,r)-l-row.planned;
-        bal+=sv;paths[i].push(bal);saves[i].push(sv);
+        bal+=sv;paths[i].push(bal);
       }
     }
     var asc=function(a,b){return a-b;};
     var band=paths.map(function(a){a.sort(asc);return {p10:q(a,0.1),p25:q(a,0.25),p50:q(a,0.5),p75:q(a,0.75),p90:q(a,0.9)};});
-    saves.forEach(function(a,i){a.sort(asc);rows[i].saveP50=q(a,0.5);});
+    // saved each month is the step between likely balances, so last month's Pay myself plus this month's saving is this month's Pay myself
+    rows.forEach(function(row,i){row.saveP50=r100(band[i].p50)-r100(i?band[i-1].p50:st0.bal);});
     return {O:O,P:P,lv:lv,rows:rows,band:band,start:st0,lam:lam,pSurprise:pSurprise,lumpLim:lumpLim,lumpAvg:lumps.length?mean(lumps):0,spread:ratios,limit:limit,planMonthly:planMonthly};
   }
 
