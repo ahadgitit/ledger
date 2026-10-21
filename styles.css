@@ -674,7 +674,10 @@ body.gated .ctx,body.gated .tabs{display:none}
 .ledger>div.tot{border-top:1px solid var(--line-2)}
 .ledger>div.tot dt{color:var(--ink);font-weight:600}.ledger>div.tot dd{font-weight:600}
 .ledger>div.neg dd{color:var(--critical)}
-.fp-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
+.fp-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:stretch}
+.fp-col{display:flex;flex-direction:column;gap:12px;min-width:0}
+/* the last card in each column takes up the rest, so both columns end level */
+.fp-col>.pnl:last-child{flex:1}
 .fp-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--grid)}
 .fp-row:first-child{border-top:0}
 .fp-row.off .fp-name,.fp-row.off .fp-in{opacity:.5}
@@ -777,5 +780,5 @@ body.gated .ctx,body.gated .tabs{display:none}
 .fc-cap[hidden]{display:none}
 .fc-cap span{position:absolute;right:0;bottom:3px;font:600 10.5px var(--font-num);color:var(--ink);background:var(--panel);padding:0 4px;border-radius:2px}
 .sw.fc-capsw{height:0;width:14px;border-top:2px dashed var(--ink);background:none;border-radius:0}
-@media (max-width:860px){.fp-grid{grid-template-columns:1fr}}
+@media (max-width:860px){.fp-grid{display:flex;flex-direction:column}.fp-col{display:contents}.fp-col>.pnl:last-child{flex:none}#fp-food{order:1}#fp-shop{order:2}#fp-bills{order:3}#fp-ess{order:4}#fp-ride{order:5}#fp-adv{order:6}}
 @media (max-width:560px){.fp-top{flex-direction:column}.fp-mode{width:100%}.fp-mode .seg{flex:1}.fp-mode .seg button{flex:1}.fp-cap{grid-template-columns:1fr}.m-pill{font-size:20px}.m-big{font-size:28px}.fp-top .seg{width:100%}.fp-top .seg button{flex:1}.fp-in input{width:96px}.fp-food{max-width:none;width:100%}}

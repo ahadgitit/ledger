@@ -209,21 +209,23 @@ var Forecast=(function(){
         '<p class="m-lead" id="fp-lead"></p>'+
         '<dl class="ledger fp-sum" id="fp-sum"></dl>'+
       '</div></section>'+
-      '<div class="fp-grid">'+
+      // two columns that stack on their own, so a short card leaves no gap beside a tall one
+      '<div class="fp-grid"><div class="fp-col">'+
       ui.pnl('fp-food','Food','what you spent each month',
         (foodMode?result('food'):capBox('food',usualFood))+foodChart()+
         '<p class="fc-note">You usually spend about '+esc(fmt(R.usual.food))+' a day on food, about '+esc(fmt(usualFood))+' over these '+d+' days. Lighter bars are months with untracked catch-up rows, so they were really higher.</p>',{cls:''})+
+      ui.pnl('fp-bills','Bills and subscriptions','tick the ones still to pay',bills+
+        '<div class="fp-foot"><button type="button" class="btn sm" data-add="bill">+ Add bill</button><span class="fp-tot">Still to pay <b id="fp-bills-t"></b></span></div>',{cls:''})+
+      ui.pnl('fp-ride','InDrive','your rate from past months × '+d+' days',rideSeg+'<div class="fp-hist">'+rhist+'</div>'+
+        '<p class="fc-note">Low and high are the averages of your cheaper and dearer months. Rides you already took this month are in Remaining.</p>',{cls:''})+
+      '</div><div class="fp-col">'+
       ui.pnl('fp-shop','Shopping and outfits','clothes, perfume, gifts, gadgets',
         (foodMode?capBox('shop',usualShop):result('shop'))+
         '<div class="fp-hist">'+shist+'</div><p class="fc-note">About '+esc(fmt(usualShop))+' over '+d+' days, going by your past months.</p>',{cls:''})+
-      ui.pnl('fp-bills','Bills and subscriptions','tick the ones still to pay',bills+
-        '<div class="fp-foot"><button type="button" class="btn sm" data-add="bill">+ Add bill</button><span class="fp-tot">Still to pay <b id="fp-bills-t"></b></span></div>',{cls:''})+
       ui.pnl('fp-ess','Monthly essentials','predicted from past months · edit any',ess+
         '<div class="fp-foot"><button type="button" class="btn sm" data-add="ess">+ Add expense</button><span class="fp-tot">Total <b id="fp-ess-t"></b></span></div>',{cls:''})+
-      ui.pnl('fp-ride','InDrive','your rate from past months × '+d+' days',rideSeg+'<div class="fp-hist">'+rhist+'</div>'+
-        '<p class="fc-note">Low and high are the averages of your cheaper and dearer months. Rides you already took this month are in Remaining.</p>',{cls:''})+
       ui.pnl('fp-adv','Advance payments','paid from Pay myself, back next payday',prev+adv,{cls:''})+
-      '</div>'+
+      '</div></div>'+
       '<div class="fp-reset"><button type="button" class="btn ghost sm" id="fp-reset">Reset to defaults</button></div>'+
       '<details class="notes"><summary>How this is worked out</summary>'+
         '<p>Remaining comes from column G of '+esc(R.cur.name)+', with your Pay myself already set aside. Payday is taken as the 20th, the latest you usually get paid, so this covers '+d+' days, today to '+esc(until)+'.</p>'+
