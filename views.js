@@ -8,7 +8,7 @@
   function $$(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s));}
 
   // ---- categories: fixed slot per category, never by rank ----
-  var SLOT={'Food':1,'Transport':2,'Utilities':3,'Family/Home':4,'Shopping':5,'Fun':6,'Renovation':7,'Loans given':8};
+  var SLOT={'Food':1,'InDrive':2,'Utilities':3,'Family/Home':4,'Shopping':5,'Fun':6,'Renovation':7,'Loans given':8};
   var EXTRA={savings:'Savings',influx:'Money in',transfer:'Transfer'};
   function catName(lower){return Logic.CAT_KEY[lower]||EXTRA[lower]||(lower?lower.charAt(0).toUpperCase()+lower.slice(1):'–');}
   function cls(name){return SLOT[name]?'c'+SLOT[name]:'cn';}
@@ -312,7 +312,7 @@
     return pnl('p-rides','InDrive',meta,
       '<div class="rides"><div class="rides-c"><div id="rides-chart"></div></div><div class="rides-s">'+
         '<div><span>Avg fare</span><b>'+(R.count?esc(fmt(R.total/R.count)):'–')+'</b></div><div><span>Office trips</span><b>'+R.officeN+'</b></div>'+
-        '<div><span>Share of transport</span><b>'+(M.A.by['Transport']>0?pct(R.total,M.A.by['Transport'])+'%':'–')+'</b></div></div></div>'+
+        '<div><span>Share of transport</span><b>'+((M.A.by['InDrive']||0)+(M.A.by['Transport']||0)>0?pct(R.total,(M.A.by['InDrive']||0)+(M.A.by['Transport']||0))+'%':'–')+'</b></div></div></div>'+
       (rows?'<ul class="rlist">'+rows+'</ul>':'<div class="empty">No rides this '+M.unit+'.</div>'),{cls:'s6'});
   }
   function largestPanel(){
@@ -324,7 +324,7 @@
   }
   function notes(){
     var n=[];
-    n.push('Spent adds Food, Utilities, Family/Home, Renovation, Transport, Shopping, Fun, Loans given and Untracked. Savings, transfers and money received back are kept out of it.');
+    n.push('Spent adds Food, Utilities, Family/Home, Renovation, InDrive, Transport, Shopping, Fun, Loans given and Untracked. Savings, transfers and money received back are kept out of it.');
     n.push('Spend trajectory: cumulative spending by day. The overlay is the previous '+M.unit+' aligned by day number. Even pace runs from zero to the cycle’s spendable amount (month start minus savings) at the day before payday. Events mark the largest single expenses.');
     n.push('Accounts and offset come from column G of your Tracking tab: offset = (Total − savings) − Remaining. Logging an entry here updates its account so the two stay equal.');
     n.push('Bills are picked out of the Expense and Description columns: Claude, internet, Amazon, foodpanda, YouTube and Netflix. A bill is still due when it was paid in an earlier period but not yet in this one.');

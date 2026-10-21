@@ -1,8 +1,8 @@
 const Logic=(function(){
   const DAY=86400000;
   const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const CATS=['Food','Utilities','Family/Home','Renovation','Transport','Shopping','Fun','Loans given','Untracked'];
-  const CAT_KEY={food:'Food',utilities:'Utilities','family/home':'Family/Home',renovation:'Renovation',transport:'Transport',shopping:'Shopping',fun:'Fun',loaned:'Loans given',untracked:'Untracked'};
+  const CATS=['Food','Utilities','Family/Home','Renovation','InDrive','Transport','Shopping','Fun','Loans given','Untracked'];
+  const CAT_KEY={food:'Food',utilities:'Utilities','family/home':'Family/Home',renovation:'Renovation',indrive:'InDrive',transport:'Transport',shopping:'Shopping',fun:'Fun',loaned:'Loans given',untracked:'Untracked'};
   const MONTH_RE=/^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*$/i;
 
   function num(s){

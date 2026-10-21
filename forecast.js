@@ -60,7 +60,7 @@ var Forecast=(function(){
         // not everyday spending: savings, money moved, Touheed, Mama, renovation, bills, rides
         if(/^(savings|transfer|influx|loaned|family\/home|renovation)$/.test(cat)) return;
         if(/tou?heed|tohid|\bmama\b|advance pay|\btransport\b/.test(s)||BILL_RE.test(s)) return;
-        if(/in\s*-?\s*drive/.test(s)||cat==='transport') return;
+        if(/in\s*-?\s*drive/.test(s)||cat==='indrive'||cat==='transport') return;
         var e=ESS.find(function(x){return x.re.test(s);});
         if(e) h.ess[e.k]+=t.amt;
         // one-off buys of 10,000 or more (an oven, a course), for the savings outlook

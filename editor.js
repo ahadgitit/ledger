@@ -16,7 +16,7 @@
   function sheetAmt(n){return n<0?'('+group(n)+')':group(n);}
 
   var CATS=[
-    {v:'Food'},{v:'Transport'},{v:'Utilities'},{v:'Family/Home'},{v:'Shopping'},{v:'Fun'},
+    {v:'Food'},{v:'InDrive'},{v:'Transport'},{v:'Utilities'},{v:'Family/Home'},{v:'Shopping'},{v:'Fun'},
     {v:'Renovation'},{v:'loaned',l:'Loaned'},{v:'untracked',l:'Untracked'},{v:'savings',l:'Savings'},
     {v:'transfer',l:'Transfer'},{v:'influx',l:'Money in'}
   ];
@@ -24,7 +24,8 @@
   var GUESS=[
     [/pay myself|saving/,'savings'],
     [/transfer|cash ?out|exchange/,'transfer'],
-    [/in ?drive|careem|uber|fare|transport|petrol|fuel|ride|rickshaw/,'Transport'],
+    [/in ?drive/,'InDrive'],
+    [/careem|uber|fare|transport|petrol|fuel|ride|rickshaw/,'Transport'],
     [/lunch|dinner|breakfast|snack|naan|roti|bryani|biryani|chaat|pizza|burger|cake|ice ?cream|sweet|food|yog|milk|tea|coffee|shake/,'Food'],
     [/grocer|internet|bill|subscri|claude|amazon|repair|laundry|medicine|meds|therapy|shampoo|soap|deod|groom|haircut/,'Utilities'],
     [/shirt|shoe|perfume|outfit|cloth|trouser|watch|specs|glasses/,'Shopping'],
