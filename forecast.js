@@ -277,6 +277,7 @@ var Forecast=(function(){
         var ov=amt(t.value);
         if(o.dataset.out==='base') s.base=ov;
         else if(o.dataset.out==='next') s.next=ov==null?null:{id:id,amt:ov};
+        else if(o.dataset.out==='shop') s.shopLimit=ov;
         else s.lumps=t.checked;
         save();update();return;
       }
@@ -662,7 +663,7 @@ var Forecast=(function(){
   function oInputs(){
     var s=load();
     return {base:s.base!=null?s.base:130000,next:s.next&&s.next.id===R.id?s.next.amt:null,
-      level:s.level||'same',hz:s.hz===12?12:6,lumps:s.lumps!==false,planned:s.planned||[]};
+      level:s.level||'same',hz:s.hz===12?12:6,lumps:s.lumps!==false,planned:s.planned||[],shopLimit:s.shopLimit!=null?s.shopLimit:null};
   }
   // one month of spending, from this month's plan
   function monthPlan(I,C){
@@ -683,23 +684,38 @@ var Forecast=(function(){
     var end=C.left!=null?C.left-(food?usualFood:usualShop):C.base-usualFood-usualShop;
     return {bal:C.kept+Math.min(0,end),dip:Math.min(0,end)};
   }
+  /* Shopping each month: you try to stay under your limit, so most months land
+     somewhere between 40% and all of it (more often near the top), and about one
+     month in ten goes a little over, by up to a fifth. */
+  var SHOP_OVER=0.1;
+  function drawShop(limit,r){
+    if(!(limit>0)) return 0;
+    return r()<SHOP_OVER?limit*(1+0.2*r()):limit*(0.4+0.6*Math.pow(r(),0.6));
+  }
+  function shopMean(limit){return limit>0?limit*((1-SHOP_OVER)*(0.4+0.6/1.6)+SHOP_OVER*1.1):0;}
   function simulate(I,C){
     var O=oInputs(),P=monthPlan(I,C),lv=LEVELS.find(function(x){return x.k===O.level;}).f;
+    // the limit you set, or your usual shopping for a month to start with
+    var limit=O.shopLimit!=null?O.shopLimit:Math.ceil(P.parts.shop/1000)*1000,other=(P.variable-P.parts.shop)*lv;
     var H=O.hz,M=months(12).slice(0,H),st0=startBalance(I,C);
     var plan={};O.planned.forEach(function(p){if(p.amt>0) plan[p.ym]=(plan[p.ym]||0)+p.amt;});
     var advT=(I.adv.touheed||{}).amt||0,advM=(I.adv.mama||{}).amt||0;
     // how each past month's everyday spending ran against the average
-    var per=R.hist.map(function(x){return x.vari/x.len;}),avg=mean(per)||1;
+    // (shopping is drawn on its own below, so it is left out here)
+    var per=R.hist.map(function(x){return (x.vari-x.shop)/x.len;}),avg=mean(per)||1;
     var ratios=per.map(function(v){return v/avg;});
     var lumps=[];R.hist.forEach(function(x){lumps=lumps.concat(x.lumps);});
     var lam=O.lumps?lumps.length/R.hist.length:0;
+    // one realistic shopping figure per month for the table, the same each time you look
+    var rt=rng(R.id*17+7);
     var rows=M.map(function(m,i){
       var sal=i===0&&O.next!=null?O.next:O.base;
       var mama=Math.max(0,P.mama-(i===0?advM:0)),tou=Math.max(0,P.touheed-(i===0?advT:0));
-      var spend=P.variable*lv;
-      return {m:m,salary:sal,mama:mama,touheed:tou,bills:P.bills,spend:spend,planned:plan[m.ym]||0,
-        save:sal-mama-tou-P.bills-spend-(plan[m.ym]||0)};
+      var shop=r100(drawShop(limit,rt));
+      return {m:m,salary:sal,mama:mama,touheed:tou,bills:P.bills,spend:other,shop:shop,planned:plan[m.ym]||0,
+        save:sal-mama-tou-P.bills-other-shop-(plan[m.ym]||0)};
     });
+    var planMonthly=O.base-P.mama-P.touheed-P.bills-other-shopMean(limit);
     var r=rng(R.id*31+H),paths=[];for(var j=0;j<H;j++) paths.push([]);
     var saves=[];for(var j2=0;j2<H;j2++) saves.push([]);
     for(var s=0;s<OSIMS;s++){
@@ -707,14 +723,14 @@ var Forecast=(function(){
       for(var i=0;i<H;i++){
         var row=rows[i],v=row.spend*ratios[Math.floor(r()*ratios.length)],l=0,n=poisson(lam,r);
         for(var k=0;k<n;k++) l+=lumps[Math.floor(r()*lumps.length)];
-        var sv=row.salary-row.mama-row.touheed-row.bills-v-l-row.planned;
+        var sv=row.salary-row.mama-row.touheed-row.bills-v-drawShop(limit,r)-l-row.planned;
         bal+=sv;paths[i].push(bal);saves[i].push(sv);
       }
     }
     var asc=function(a,b){return a-b;};
     var band=paths.map(function(a){a.sort(asc);return {p10:q(a,0.1),p25:q(a,0.25),p50:q(a,0.5),p75:q(a,0.75),p90:q(a,0.9)};});
     saves.forEach(function(a,i){a.sort(asc);rows[i].saveP50=q(a,0.5);});
-    return {O:O,P:P,lv:lv,rows:rows,band:band,start:st0,lam:lam,lumpAvg:lumps.length?mean(lumps):0,spread:ratios};
+    return {O:O,P:P,lv:lv,rows:rows,band:band,start:st0,lam:lam,lumpAvg:lumps.length?mean(lumps):0,spread:ratios,limit:limit,planMonthly:planMonthly};
   }
 
   function outlookView(){
@@ -732,6 +748,7 @@ var Forecast=(function(){
       '<div class="ol-in">'+
         '<div class="fld" data-out="base"><span class="lbl">Base salary</span>'+money(O.base)+'</div>'+
         '<div class="fld" data-out="next"><span class="lbl">Salary on 20 '+esc(nm.name)+'</span>'+money(O.next,'','Same as base')+'</div>'+
+        '<div class="fld" data-out="shop"><span class="lbl">Shopping limit a month</span>'+money(O.shopLimit,'','Your usual')+'<small class="ol-hint" id="ol-shop-hint"></small></div>'+
         '<div class="fld"><span class="lbl">Spending in the coming months, against this month</span>'+lvSeg+'</div>'+
       '</div>'+
       '<div class="ol-stats" id="ol-stats"></div>'+
@@ -748,7 +765,7 @@ var Forecast=(function(){
   function drawOutlook(I,C){
     var box=$('#ol-chart');if(!box) return;
     var S=simulate(I,C),O=S.O,P=S.P,B=S.band,rows=S.rows,H=rows.length,last=B[H-1];
-    var monthly=rows[H>1?1:0].save;
+    var monthly=S.planMonthly;
     // the typical month, from where the most likely line goes (planned expenses left out)
     var gain=(last.p50-S.start.bal+rows.reduce(function(a,r){return a+r.planned;},0)-(rows[0].salary-O.base))/H;
     var tile=function(k,v,sub,cls){return '<div><span>'+esc(k)+'</span><b class="'+(cls||'')+'">'+v+'</b><small>'+sub+'</small></div>';};
@@ -757,8 +774,9 @@ var Forecast=(function(){
       tile('Saved a month, likely',esc(fmtS(r100(gain))),'plan alone: '+esc(fmtS(r100(monthly)))+(O.lumps&&S.lam>0?', before surprise buys':''),gain<0?'neg':'')+
       tile('Likely range',esc(K(last.p10))+' – '+esc(K(last.p90)),'8 in 10 futures land here');
     $('#ol-month').innerHTML='Each month: salary '+esc(fmt(O.base))+' − Mama '+esc(fmt(P.mama))+' − Touheed '+esc(fmt(P.touheed))+' − bills '+esc(fmt(P.bills))+
-      ' − food '+esc(fmt(r100(P.parts.food*S.lv)))+' ('+P.foodSrc+') − shopping '+esc(fmt(r100(P.parts.shop*S.lv)))+' ('+P.shopSrc+') − essentials '+esc(fmt(r100(P.parts.ess*S.lv)))+' − InDrive '+esc(fmt(r100(P.parts.ride*S.lv)))+
+      ' − food '+esc(fmt(r100(P.parts.food*S.lv)))+' ('+P.foodSrc+') − shopping up to '+esc(fmt(S.limit))+' (it varies month to month, see the table) − essentials '+esc(fmt(r100(P.parts.ess*S.lv)))+' − InDrive '+esc(fmt(r100(P.parts.ride*S.lv)))+
       ' = <b>'+esc(fmtS(r100(monthly+0)))+'</b> saved'+(S.start.dip<0?'. This month’s shortfall of about '+esc(fmt(r100(-S.start.dip)))+' comes out first.':'.');
+    var sh=$('#ol-shop-hint');if(sh) sh.textContent=(O.shopLimit==null?'Using your usual, '+fmt(S.limit)+'. ':'')+'Most months land at '+K(S.limit*0.4)+'\u2013'+K(S.limit)+', now and then a little over.';
     $('#ol-lumpnote').textContent=O.lumps&&S.lam>0?'Surprise buys of Rs 10,000+: about '+(Math.round(S.lam*10)/10)+' a month, '+K(S.lumpAvg)+' each':'';
     // chart: recorded Pay myself for past cycles, then the projection from this cycle on
     var past=R.past,A=past.length,isCur=A>0&&past[A-1].day===R.cur.start,s0=isCur?A-1:A,N=s0+H;
@@ -802,7 +820,7 @@ var Forecast=(function(){
       }else if(i===s0){cy=Y(S.start.bal);h='<div class="tt-h">Now</div><div class="tt-b">Pay myself '+esc(fmt(S.start.bal))+'</div>';}
       else{var j=i-s0-1,r=rows[j],b=B[j];cy=Y(b.p50);
         h='<div class="tt-h">End of '+esc(r.m.name+' '+r.m.year)+' cycle</div><div class="tt-b">Likely '+esc(fmt(r100(b.p50)))+'<br>Range '+esc(fmt(r100(b.p10)))+' – '+esc(fmt(r100(b.p90)))+
-        '<br>Salary '+esc(fmt(r.salary))+' · saved about '+esc(fmtS(r100(r.saveP50)))+(r.planned?'<br>Planned: '+esc(fmt(r.planned)):'')+'</div>';}
+        '<br>Salary '+esc(fmt(r.salary))+' · shopping '+esc(fmt(r.shop))+' · saved about '+esc(fmtS(r100(r.saveP50)))+(r.planned?'<br>Planned: '+esc(fmt(r.planned)):'')+'</div>';}
       cross.setAttribute('x1',cx);cross.setAttribute('x2',cx);cross.removeAttribute('hidden');
       hov.setAttribute('cx',cx);hov.setAttribute('cy',cy.toFixed(1));hov.removeAttribute('hidden');
       if(UIref) UIref.showTip(h,e.clientX,e.clientY);
@@ -815,9 +833,9 @@ var Forecast=(function(){
       $('#ol-hist').innerHTML='Recorded: Pay myself went from <b>'+esc(fmt(f.saved))+'</b> in '+esc(f.full)+' to <b>'+esc(fmt(l.saved))+'</b> in '+esc(l.full)+', about <b>'+esc(fmtS(r100(per)))+'</b> a month. The projection expects about <b>'+esc(fmtS(r100(gain)))+'</b> a month from here.';
     }else $('#ol-hist').textContent='';
     // month by month
-    $('#ol-table').innerHTML='<thead><tr><th>Cycle</th><th class="n">Salary</th><th class="n">Mama + Touheed</th><th class="n">Bills</th><th class="n">Spending</th><th class="n">Planned</th><th class="n">Saved (likely)</th><th class="n">Pay myself</th></tr></thead><tbody>'+
-      R.past.filter(function(p){return p.day!==R.cur.start;}).map(function(p){return '<tr class="ol-rec"><td>'+esc(p.full)+' <small>recorded</small></td><td class="n" colspan="6"></td><td class="n">'+esc(fmt(p.saved))+'</td></tr>';}).join('')+
-      rows.map(function(r,i){return '<tr><td>'+esc(r.m.name+' '+r.m.year)+'</td><td class="n">'+esc(fmt(r.salary))+'</td><td class="n">'+esc(fmt(r.mama+r.touheed))+'</td><td class="n">'+esc(fmt(r.bills))+'</td><td class="n">'+esc(fmt(r100(r.spend)))+'</td><td class="n">'+(r.planned?esc(fmt(r.planned)):'–')+'</td><td class="n">'+esc(fmtS(r100(r.saveP50)))+'</td><td class="n">'+esc(fmt(r100(B[i].p50)))+'</td></tr>';}).join('')+'</tbody>';
+    $('#ol-table').innerHTML='<thead><tr><th>Cycle</th><th class="n">Salary</th><th class="n">Mama + Touheed</th><th class="n">Bills</th><th class="n">Spending</th><th class="n">Shopping</th><th class="n">Planned</th><th class="n">Saved (likely)</th><th class="n">Pay myself</th></tr></thead><tbody>'+
+      R.past.filter(function(p){return p.day!==R.cur.start;}).map(function(p){return '<tr class="ol-rec"><td>'+esc(p.full)+' <small>recorded</small></td><td class="n" colspan="7"></td><td class="n">'+esc(fmt(p.saved))+'</td></tr>';}).join('')+
+      rows.map(function(r,i){return '<tr><td>'+esc(r.m.name+' '+r.m.year)+'</td><td class="n">'+esc(fmt(r.salary))+'</td><td class="n">'+esc(fmt(r.mama+r.touheed))+'</td><td class="n">'+esc(fmt(r.bills))+'</td><td class="n">'+esc(fmt(r100(r.spend)))+'</td><td class="n'+(r.shop>S.limit?' ol-over':'')+'">'+esc(fmt(r.shop))+'</td><td class="n">'+(r.planned?esc(fmt(r.planned)):'–')+'</td><td class="n">'+esc(fmtS(r100(r.saveP50)))+'</td><td class="n">'+esc(fmt(r100(B[i].p50)))+'</td></tr>';}).join('')+'</tbody>';
   }
 
   // a bill's estimate for a cycle, shared with the Overview
