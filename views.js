@@ -697,6 +697,7 @@
       var k=itemKey(t.name),same=M.all.filter(function(x){return itemKey(x.name)===k;});
       var tot=same.reduce(function(s,x){return s+Math.abs(x.amt);},0);
       html='<header class="pnl-h"><span class="pnl-t"><i class="pnl-dot"></i>Transaction</span><span class="pnl-m id">'+txId(t)+'</span><button type="button" class="x" data-insp-close aria-label="Close inspector">×</button></header><div class="pnl-b">'+
+        '<div class="ins-acts"><button type="button" class="btn sm" data-edit-tx="'+t.row+'">Edit</button><button type="button" class="btn sm ghost ins-del" data-del-tx="'+t.row+'">Delete</button></div>'+
         '<div class="ins-h"><div class="ins-k">'+tag(catName(t.cat))+'</div><div class="ins-v'+(t.amt<0?' good':'')+'">'+(t.amt<0?'+':'')+esc(fmt(Math.abs(t.amt)))+'</div><div class="ins-n">'+esc(t.name)+'</div></div>'+
         '<dl class="props">'+prop('Description',esc(t.desc||'–'))+prop('Date',t.day!=null?esc(wday(t.day)+' '+fmtDayY(t.day)):'–')+prop('Payment mode',esc(t.mode))+prop('Cycle',esc(t.cycle||'–'))+
           prop('Source','<a href="'+esc(L.sheetUrl())+'#gid=0&range=A'+t.row+':F'+t.row+'" target="_blank" rel="noopener">Tracking!A'+t.row+':F'+t.row+' ↗</a>')+'</dl>'+
@@ -801,7 +802,7 @@
     window.scrollTo(0,y);
   }
 
-  var UI={pnl:pnl,kpi:kpi,showTip:showTip,hideTip:hideTip,rerender:function(){render();}};
+  var UI={pnl:pnl,kpi:kpi,showTip:showTip,hideTip:hideTip,rerender:function(){render();},clearSel:function(){U.ex.sel=null;if(U.view==='explorer') exTable();}};
   window.LedgerUI=UI;
 
   // ---- tooltip ----

@@ -761,6 +761,8 @@ body.gated .ctx,body.gated .tabs{display:none}
 .fp-capd{grid-column:1/-1;margin:0;font:12px var(--font-num);color:var(--ink-2)}
 .fp-capd:empty{display:none}
 .fp-use{height:38px}
+.ins-acts{display:flex;gap:8px;margin-bottom:12px}
+.ins-del{color:var(--critical);border-color:rgba(231,106,110,.4)}.ins-del:hover{background:var(--critical-bg)}
 /* new pay cycle */
 .cyc-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end}
 #cyc-dlg select.inline{font:13.5px var(--font-ui);color:var(--ink);background:var(--raise);border:1px solid var(--line-2);border-radius:var(--r);padding:8px 10px;width:100%;color-scheme:dark}

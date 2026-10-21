@@ -129,6 +129,9 @@
     mem=memory();
     freshForm();
     drawAdd();
+    $('#add-title').innerHTML='<span class="dlg-k">NEW OBJECT</span>Log entry';
+    $('#add-save').textContent='Add entry';
+    $('#add-again').closest('.again').hidden=false;
     var d=$('#add-dlg');
     if(!d.open) d.showModal();
     setTimeout(function(){var a=$('#f-amount');if(a&&!userFocused('#add-dlg')) a.focus();},30);
@@ -212,10 +215,16 @@
     var pl=placement(L.S.tracking||[]);
     var n=amountNum();
     var cells=[F.name.trim()||'…',n>0?sheetAmt(signed()):'…',F.desc.trim()||'–',toSheetDate(F.date)||'…',modeValue()||'…',F.cat||'…'];
-    r.innerHTML='<div class="r-h">'+(pl?'Goes into <b>'+esc(pl.cycle)+'</b>, row '+pl.row:'Goes after your last entry')+'</div>'+
+    r.innerHTML='<div class="r-h">'+(F.edit?'Updates row '+F.edit.row:pl?'Goes into <b>'+esc(pl.cycle)+'</b>, row '+pl.row:'Goes after your last entry')+'</div>'+
       '<div class="r-row">'+cells.map(function(c,i){return '<span'+(i===1?' class="r-n'+(F.dir==='in'?' in':'')+'"':'')+'>'+esc(c)+'</span>';}).join('')+'</div>';
     var box=$('#adjust-box');
-    if(box){
+    if(box&&F.edit){
+      var ea=editAdj(L.S.tracking||[]);
+      if(ea.skip) box.innerHTML='<div class="adjust off"><span>'+esc(ea.skip)+'</span></div>';
+      else if(!ea.ch.length) box.innerHTML='';
+      else box.innerHTML='<label class="adjust'+(F.adjust?'':' off')+'"><input type="checkbox" id="f-adjust"'+(F.adjust?' checked':'')+'><span>Also update '+esc(ea.ch.map(function(c){return c.acct;}).join(' and '))+' in column G</span>'+
+        '<b>'+ea.ch.map(function(c){return esc(group(c.old))+(F.adjust?' \u2192 <span class="to">'+esc((c.next<0?'\u2212':'')+group(c.next))+'</span>':'');}).join(', ')+'</b></label>';
+    }else if(box){
       var adj=adjustment(L.S.tracking||[]);
       if(!adj) box.innerHTML='';
       else if(adj.skip) box.innerHTML='<div class="adjust off"><span>'+esc(adj.skip)+'</span></div>';
@@ -230,6 +239,7 @@
   var saving=false;
   function saveEntry(again){
     if(saving||problems().length) return;
+    if(F.edit) return saveEdit();
     var row=[F.name.trim(),signed(),F.desc.trim(),toSheetDate(F.date),modeValue(),F.cat];
     var keep={mode:F.mode,date:F.date};
     var wantAdjust=F.adjust;
@@ -295,6 +305,122 @@
       toast('Removed '+row[0]+' from row '+pl.row+'.'+note);
     }).catch(function(e){toast(e&&e.code==='undo'?e.message:fail(e));});
   }
+
+
+  // =====================================================================
+  // Edit and delete a logged entry (from the Explorer inspector)
+  // =====================================================================
+  function fromSheetDate(s){var m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(s||'').trim());return m?m[3]+'-'+('0'+m[2]).slice(-2)+'-'+('0'+m[1]).slice(-2):'';}
+  // the entry as it would be written back: numbers as numbers, money in negative
+  function rowOf(r){return [cell(r,0),Logic.num(cell(r,1)),cell(r,2),cell(r,3),cell(r,4),cell(r,5)];}
+  // the month a row belongs to: its heading, its last entry, and whether it is the latest month
+  function monthOf(rows,row){
+    var hs=headings(rows),h=-1,next=rows.length;
+    hs.forEach(function(x,k){if(x<row-1){h=x;next=k+1<hs.length?hs[k+1]:rows.length;}});
+    if(h<0) return null;
+    var last=h+1;for(var i=h+1;i<next;i++) if(filled(rows[i])) last=i;
+    return {head:h+1,last:last+1,latest:h===hs[hs.length-1],name:cell(rows[h],0)};
+  }
+  // what an entry does to the balances in column G: spending lowers its account
+  function effect(cat,mode,amt){
+    var acct=Logic.normMode(mode);
+    if(['ABL','Sadapay','Cash'].indexOf(acct)<0||String(cat).toLowerCase()==='savings'||isNaN(amt)) return null;
+    return {acct:acct,delta:-amt};
+  }
+  // balance changes for the latest month: undo the old entry's effect, apply the new one
+  function balChanges(rows,before,after){
+    var hs=headings(rows),b=blocks(rows).filter(function(x){return x.head===hs[hs.length-1]+1;})[0];
+    if(!b) return [];
+    var d={};
+    if(before) d[before.acct]=(d[before.acct]||0)-before.delta;
+    if(after) d[after.acct]=(d[after.acct]||0)+after.delta;
+    return Object.keys(d).filter(function(k){return Math.abs(d[k])>0.001&&b.acc[k];}).map(function(k){var a=b.acc[k];return {acct:k,row:a.row,old:a.value,next:a.value+d[k]};});
+  }
+  // write balance changes, leaving any cell with a formula alone
+  function writeBal(ch){
+    if(!ch.length) return Promise.resolve([]);
+    return Promise.all(ch.map(function(c){return L.get('Tracking!G'+c.row,'FORMULA');})).then(function(fs){
+      var ok=ch.filter(function(c,i){var v=((fs[i]||[])[0]||[])[0];return !(typeof v==='string'&&v.charAt(0)==='=');});
+      if(!ok.length) return [];
+      return L.batch(ok.map(function(c){return {range:'Tracking!G'+c.row,values:[[c.next]]};})).then(function(){return ok;});
+    });
+  }
+  function balNote(done){return done.length?' '+done.map(function(c){return c.acct+' '+group(c.old)+' → '+(c.next<0?'−':'')+group(c.next);}).join(', ')+'.':'';}
+
+  function openEdit(row){
+    var rows=L.S.tracking||[],r=rows[row-1];
+    if(!r||!filled(r)){toast('Row '+row+' is empty now. Refresh and try again.');return;}
+    mem=memory();
+    var amt=Logic.num(cell(r,1)),mode=Logic.normMode(cell(r,4));
+    F={dir:amt<0?'in':'out',amount:isNaN(amt)?'':group(Math.abs(amt)),name:cell(r,0),desc:cell(r,2),cat:catValue(cell(r,5))||cell(r,5),
+      mode:MODES.indexOf(mode)>=0?mode:'Other',other:MODES.indexOf(mode)>=0?'':cell(r,4),date:fromSheetDate(cell(r,3))||karachi(0),adjust:true,
+      touched:{cat:true,mode:true,dir:true},edit:{row:row,orig:rowOf(r)}};
+    drawAdd();
+    $('#add-title').innerHTML='<span class="dlg-k">ROW '+row+'</span>Edit entry';
+    $('#add-save').textContent='Save changes';
+    $('#add-again').closest('.again').hidden=true;
+    var d=$('#add-dlg');if(!d.open) d.showModal();
+  }
+  function editAdj(rows){
+    var e=F.edit,m=monthOf(rows,e.row);
+    if(!m||!m.latest) return {skip:'Balances in column G are only kept for the latest month.'};
+    var ch=balChanges(rows,effect(e.orig[5],e.orig[4],e.orig[1]),effect(F.cat,modeValue(),signed()));
+    return {ch:ch};
+  }
+  function saveEdit(){
+    var e=F.edit,row=[F.name.trim(),signed(),F.desc.trim(),toSheetDate(F.date),modeValue(),F.cat],range='Tracking!A'+e.row+':F'+e.row,want=F.adjust,done=[];
+    saving=true;setBusy('#add-save',true,'Saving…');
+    needToken().then(function(){return L.get('Tracking!A1:G5000');}).then(function(rows){
+      var now=rowOf(rows[e.row-1]);
+      if(JSON.stringify(now)!==JSON.stringify(e.orig)) throw Object.assign(new Error('Row '+e.row+' changed in the sheet since you opened it. Refresh and try again.'),{code:'verify'});
+      var adj=want?editAdj(rows):null;
+      return L.put(range,[row]).then(function(){return adj&&adj.ch?writeBal(adj.ch):[];});
+    }).then(function(b){
+      done=b;
+      saving=false;setBusy('#add-save',false,'Save changes');
+      $('#add-dlg').close();L.refresh();
+      toast('Updated row '+e.row+'.'+balNote(done),[{label:'Undo',run:function(){
+        needToken().then(function(){return L.put(range,[e.orig]);}).then(function(){
+          return done.length?L.batch(done.map(function(c){return {range:'Tracking!G'+c.row,values:[[c.old]]};})):null;
+        }).then(function(){L.refresh();toast('Row '+e.row+' put back.');}).catch(function(x){toast(fail(x));});
+      }}]);
+    }).catch(function(x){
+      saving=false;setBusy('#add-save',false,'Save changes');
+      $('#add-hint').textContent=x&&x.code==='verify'?x.message:fail(x);$('#add-hint').classList.add('bad');
+    });
+  }
+
+  function deleteEntry(row){
+    var rows=L.S.tracking||[],r=rows[row-1];
+    if(!r||!filled(r)){toast('Row '+row+' is empty now. Refresh and try again.');return;}
+    var orig=rowOf(r),m=monthOf(rows,row),eff=m&&m.latest?effect(orig[5],orig[4],orig[1]):null;
+    var what=orig[0]+' · '+(orig[1]<0?'+':'')+fmt(Math.abs(orig[1]))+' on '+orig[3];
+    if(!window.confirm('Delete '+what+' (row '+row+')?\n\nThe entries after it in '+(m?m.name:'this month')+' move up one row.'+(eff?' '+eff.acct+' in column G gets '+fmt(Math.abs(eff.delta))+(eff.delta<0?' back':' taken off')+'.':''))) return;
+    var block,first=row,done=[];
+    needToken().then(function(){return L.get('Tracking!A1:G5000');}).then(function(fresh){
+      if(JSON.stringify(rowOf(fresh[row-1]))!==JSON.stringify(orig)) throw Object.assign(new Error('Row '+row+' changed in the sheet. Refresh and try again.'),{code:'verify'});
+      var mm=monthOf(fresh,row);
+      if(!mm) throw Object.assign(new Error('Row '+row+' is not under a month heading.'),{code:'verify'});
+      var last=mm.last;
+      // entries below it in the same month move up one row; nothing else in the sheet moves
+      return L.get('Tracking!A'+row+':F'+last,'FORMULA').then(function(cur){
+        if(cur.some(function(x){return (x||[]).some(function(v){return typeof v==='string'&&v.charAt(0)==='=';});})) throw Object.assign(new Error('Some entries below row '+row+' use formulas, so nothing was moved. Delete it in the sheet instead.'),{code:'verify'});
+        block={last:last,values:cur.map(function(x){x=x||[];while(x.length<6) x.push('');return x.slice(0,6);})};
+        var shifted=block.values.slice(1).concat([['','','','','','']]);
+        return L.put('Tracking!A'+row+':F'+last,shifted);
+      }).then(function(){return eff?writeBal(balChanges(fresh,eff,null)):[];});
+    }).then(function(b){
+      done=b;L.refresh();
+      if(U_sel_clear) U_sel_clear();
+      toast('Deleted '+orig[0]+' from row '+row+'.'+balNote(done),[{label:'Undo',run:function(){
+        needToken().then(function(){return L.put('Tracking!A'+first+':F'+block.last,block.values);}).then(function(){
+          return done.length?L.batch(done.map(function(c){return {range:'Tracking!G'+c.row,values:[[c.old]]};})):null;
+        }).then(function(){L.refresh();toast(orig[0]+' is back in row '+first+'.');}).catch(function(x){toast(fail(x));});
+      }}]);
+    }).catch(function(x){toast(x&&x.code==='verify'?x.message:fail(x));});
+  }
+  // the Explorer closes its inspector once the entry is gone
+  var U_sel_clear=function(){if(window.LedgerUI&&LedgerUI.clearSel) LedgerUI.clearSel();};
 
   // =====================================================================
   // Balances
@@ -574,6 +700,8 @@
     if(t.id==='add'||t.id==='fab') return openAdd();
     if(t.id==='bal') return openBal();
     if(t.id==='cyc'||t.hasAttribute('data-open-cycle')) return openCycle();
+    if(t.hasAttribute('data-edit-tx')) return openEdit(+t.getAttribute('data-edit-tx'));
+    if(t.hasAttribute('data-del-tx')) return deleteEntry(+t.getAttribute('data-del-tx'));
     if(t.hasAttribute('data-open-bal')) return openBal(t.getAttribute('data-open-bal'),t.getAttribute('data-acct'));
     if(t.matches('[data-close]')){t.closest('dialog').close();return;}
     var inAdd=t.closest('#add-dlg'),inBal=t.closest('#bal-dlg');
