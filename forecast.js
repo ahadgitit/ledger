@@ -113,7 +113,16 @@ var Forecast=(function(){
       return {day:c.start,full:c.name,label:c.name.slice(0,3),saved:c.tx.filter(function(t){return t.cat==='savings';}).reduce(function(a,t){return a+t.amt;},0)};
     }).filter(function(p){return p.saved>0;});
     var prevId=i>0?String(cyc[i-1].start):null;
-    return {past:past,cur:cur,id:id,prev:i>0?cyc[i-1]:null,prevAdv:prevId?s.adv[prevId]||null:null,days:days,pay:pay,lastDay:pay-1,
+    // food per day, for the daily chart and for what is already spent this cycle and today
+    var fd={},fi={},logged={},today=M.today,soFar=0;
+    M.all.forEach(function(t){
+      if(t.day==null) return;
+      logged[t.day]=true;
+      if(t.cat==='food'&&t.amt>0){fd[t.day]=(fd[t.day]||0)+t.amt;(fi[t.day]=fi[t.day]||[]).push(t.name+' '+K(t.amt));}
+    });
+    for(var dd=cur.start;dd<=today;dd++) soFar+=fd[dd]||0;
+    var food={byDay:fd,items:fi,logged:logged,today:fd[today]||0,soFar:soFar,passed:Math.max(0,today-cur.start),now:today};
+    return {food:food,past:past,cur:cur,id:id,prev:i>0?cyc[i-1]:null,prevAdv:prevId?s.adv[prevId]||null:null,days:days,pay:pay,lastDay:pay-1,
       remaining:cur.bal.remaining,saved:saved,bills:bills,ess:ess,hist:h,lv:rideLevels(h),
       usual:{food:perDay(h,function(x){return x.food;}),shop:perDay(h,function(x){return x.shop;})}};
   }
@@ -132,9 +141,12 @@ var Forecast=(function(){
     PEOPLE.forEach(function(p){var a=I.adv[p.key]||{};adv+=a.amt||0;if(a.logged) advIn+=a.amt||0;});
     // an advance already logged in the sheet lowered Remaining, but it is paid out of Pay myself
     var money=R.remaining+advIn,base=money-bills-ess-ride;
-    var cap=I.mode==='food'?I.shopCap:I.foodCap;
-    var left=cap==null?null:base-cap;
-    return {money:money,advIn:advIn,adv:adv,bills:bills,ess:ess,ride:ride,base:base,cap:cap,left:left,kept:R.saved-adv};
+    var cap=I.mode==='food'?I.shopCap:I.foodCap,ft=R.food.today;
+    // a food cap covers the days left, today included, and today's logged food is already out of Remaining
+    var need=cap==null?null:I.mode==='food'?cap:Math.max(0,cap-ft);
+    var left=need==null?null:base-need;
+    var dayLimit=I.mode==='food'?(left==null?null:(left+ft)/R.days):(cap==null?null:cap/R.days);
+    return {need:need,dayLimit:dayLimit,foodToday:ft,money:money,advIn:advIn,adv:adv,bills:bills,ess:ess,ride:ride,base:base,cap:cap,left:left,kept:R.saved-adv};
   }
 
   // ---------------------------------------------------------------- view
@@ -212,6 +224,9 @@ var Forecast=(function(){
         '<p class="m-lead" id="fp-lead"></p>'+
         '<dl class="ledger fp-sum" id="fp-sum"></dl>'+
       '</div></section>'+
+      ui.pnl('fp-daily','Food per day','what you spent each day against your daily limit','<div class="fd-stats" id="fd-stats"></div><div class="fd-chart" id="fd-chart"></div>'+
+        '<div class="legend sm"><span><i class="sw c1"></i>Food spent</span><span><i class="sw fd-oversw"></i>Over the limit</span><span><i class="sw fd-limsw"></i>Daily limit</span><span><i class="sw fd-usesw"></i>Your usual</span></div>',
+        {cls:'',tools:'<div class="seg sm" role="group" aria-label="Days shown"><button type="button" data-frange="cycle" aria-pressed="'+(load().frange!=='60')+'">This cycle</button><button type="button" data-frange="60" aria-pressed="'+(load().frange==='60')+'">Last 60 days</button></div>'})+
       // two columns that stack on their own, so a short card leaves no gap beside a tall one
       '<div class="fp-grid"><div class="fp-col">'+
       ui.pnl('fp-food','Food','what you spent each month',
@@ -311,6 +326,7 @@ var Forecast=(function(){
         inp.value=u.toLocaleString('en-US');if(pd) pd.value=Math.round(u/R.days).toLocaleString('en-US');
         s[box.dataset.cap+'Cap']=u;save();update();
       }
+      else if(t.dataset.frange){s.frange=t.dataset.frange;save();$$('[data-frange]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});update();}
       else if(t.dataset.level){s.level=t.dataset.level;save();$$('[data-level]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});update();}
       else if(t.dataset.hz){s.hz=+t.dataset.hz;save();$$('[data-hz]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});update();}
       else if(t.dataset.add==='plan'){var M=months(1);s.planned=(s.planned||[]).concat([{ym:M[0].ym,label:'',amt:0}]);save();rerender(function(){focusLast('.ol-plan .fp-lbl');});}
@@ -342,7 +358,7 @@ var Forecast=(function(){
       lv='none';word='Set your '+capWhat+' cap';k='';big=null;per='';
       lead='Enter how much you will allow yourself for '+capWhat+' until '+fmtDay(R.lastDay)+', and this works out what is left for '+what+'.';
     }else{
-      var pd=C.left/d;
+      var pd=food?C.dayLimit:C.left/d;
       lv=C.left<=0?'critical':pd>=usual?'good':pd>=usual*0.6?'warning':'critical';
       word=C.left<=0?'Pay myself will be touched':lv==='good'?'Pay myself stays untouched':lv==='warning'?'Tight, but doable':'Too little left for '+what;
       k=C.left<=0?'Short by':'You can spend on '+what+' until '+fmtDay(R.lastDay);
@@ -364,7 +380,8 @@ var Forecast=(function(){
       row('Bills still to pay',neg(C.bills))+
       row('Monthly essentials',neg(C.ess))+
       row('InDrive ('+{low:'low',avg:'average',high:'high'}[I.ride]+')',neg(C.ride))+
-      row('Your '+capWhat+' cap',C.cap==null?'<span class="fp-miss">not set</span>':neg(C.cap))+
+      (food||C.cap==null?row('Your '+capWhat+' cap',C.cap==null?'<span class="fp-miss">not set</span>':neg(C.cap))
+        :row('Food: '+fmt(C.dayLimit)+' a day \u00d7 '+d+' days'+(C.foodToday?', less '+fmt(C.foodToday)+' already spent today':''),neg(C.need)))+
       row('Left for '+what,C.left==null?'–':esc(fmtS(C.left)),'tot'+(C.left!=null&&C.left<0?' neg':''))+
       row('Pay myself kept'+(C.adv?', after '+fmt(C.adv)+' in advances (back next payday)':''),esc(fmt(C.kept)));
     $('#fp-bills-t').textContent=fmt(C.bills);
@@ -373,9 +390,12 @@ var Forecast=(function(){
     var pv=$('#fp-pred');
     pv.textContent=C.left==null?'Set your '+capWhat+' cap first':fmtS(C.left);
     pv.classList.toggle('neg',C.left!=null&&C.left<=0);pv.classList.toggle('miss',C.left==null);
-    $('#fp-pred-d').textContent=C.left!=null&&C.left>0?fmt(C.left/d)+' a day':'';
+    $('#fp-pred-d').textContent=C.left!=null&&C.left>0?fmt(food?C.dayLimit:C.left/d)+' a day'+(food?' for the '+d+' days left':''):'';
     var cd=$('[data-capd]');
-    if(cd) cd.textContent=C.cap==null?'':cd.dataset.capd==='food'?fmt(C.cap)+' over '+d+' days, today to '+fmtDay(R.lastDay)+'.':fmt(C.cap/d)+' a day over '+d+' days';
+    if(cd) cd.textContent=C.cap==null?'':cd.dataset.capd==='food'
+      ?fmt(C.cap)+' for the '+d+' days left, today to '+fmtDay(R.lastDay)+(C.foodToday?', counting the '+fmt(C.foodToday)+' already spent on food today':'')+'.'
+      :fmt(C.cap/d)+' a day over '+d+' days';
+    drawDaily(C.dayLimit);
     // the line on the food chart: your food cap, or the food budget it predicts
     var line=$('#fp-capline'),mx=+$('#fp-fchart').dataset.max,fv=food?C.left:C.cap;
     line.hidden=!(fv>0);
@@ -388,6 +408,39 @@ var Forecast=(function(){
     drawOutlook(I,C);
   }
 
+
+  // ---------------------------------------------------------------- food per day
+  function drawDaily(limit){
+    var box=$('#fd-chart');if(!box) return;
+    var F=R.food,cyc=load().frange!=='60',now=F.now;
+    var a=cyc?R.cur.start:now-59,b=cyc?R.lastDay:now,n=b-a+1;
+    var W=Math.max(280,box.clientWidth),H=W<520?180:200,pl=40,pr=10,pt=16,pb=24,iw=W-pl-pr,ih=H-pt-pb;
+    var usual=R.usual.food,mx=usual;
+    for(var d=a;d<=Math.min(b,now);d++) mx=Math.max(mx,F.byDay[d]||0);
+    if(limit>0) mx=Math.max(mx,limit);
+    // round gridlines: a nice step, four or so of them
+    var stp=Viz.niceMax(mx*1.1/4),nt=Math.ceil(mx*1.1/stp),top=stp*nt,Y=function(v){return pt+ih*(1-v/top);},bw=iw/n,gap=Math.min(2,bw*0.25);
+    var g='';
+    for(var t=0;t<=nt;t++){var v=stp*t;g+='<line class="ol-grid'+(t===0?' zero':'')+'" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+Y(v).toFixed(1)+'" y2="'+Y(v).toFixed(1)+'"/><text class="ol-ax" x="'+(pl-6)+'" y="'+(Y(v)+3.5).toFixed(1)+'" text-anchor="end">'+esc(K(v))+'</text>';}
+    var bars='',over=0,spent=0,days=0,lab='',every=Math.max(1,Math.ceil(n*46/iw));
+    for(var i=0;i<n;i++){
+      var day=a+i,x=pl+i*bw,v2=F.byDay[day]||0,past=day<=now,isOver=past&&limit>0&&v2>limit;
+      // days with nothing logged at all are gaps in the record, not days without food
+      if(past&&(F.logged[day]||v2)){days++;spent+=v2;if(isOver) over++;}
+      var tip=fmtDay(day)+(day===now?' (today)':'')+'\n'+(!past?'Still to come':v2?'Food '+fmt(v2)+(limit>0?(isOver?', '+fmt(v2-limit)+' over the limit':', '+fmt(limit-v2)+' under the limit'):'')+'\n'+(F.items[day]||[]).slice(0,4).join('\n'):F.logged[day]?'No food logged':'Nothing logged this day');
+      if(past&&v2>0) bars+='<rect class="fd-bar'+(isOver?' over':'')+(day===now?' now':'')+'" x="'+(x+gap/2).toFixed(1)+'" y="'+Y(v2).toFixed(1)+'" width="'+Math.max(1,bw-gap).toFixed(1)+'" height="'+(pt+ih-Y(v2)).toFixed(1)+'" rx="'+Math.min(3,bw/4).toFixed(1)+'"/>';
+      else if(!past) bars+='<rect class="fd-future" x="'+(x+gap/2).toFixed(1)+'" y="'+(pt+ih-2)+'" width="'+Math.max(1,bw-gap).toFixed(1)+'" height="2"/>';
+      bars+='<rect class="fd-hit" data-tip="'+esc(tip)+'" x="'+x.toFixed(1)+'" y="'+pt+'" width="'+bw.toFixed(1)+'" height="'+ih+'"/>';
+      if(day===now||(i%every===0&&Math.abs(day-now)>=every)) lab+='<text class="ol-ax'+(day===now?' ol-cur':'')+'" x="'+(x+bw/2).toFixed(1)+'" y="'+(H-6)+'" text-anchor="middle">'+esc(day===now?'Today':fmtDay(day))+'</text>';
+    }
+    var lines='<line class="fd-use" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+Y(usual).toFixed(1)+'" y2="'+Y(usual).toFixed(1)+'"/>';
+    if(limit>0) lines+='<line class="fd-lim" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+Y(limit).toFixed(1)+'" y2="'+Y(limit).toFixed(1)+'"/><text class="fd-limt" x="'+(W-pr)+'" y="'+(Y(limit)-4).toFixed(1)+'" text-anchor="end">Limit '+esc(fmt(limit))+'</text>';
+    box.innerHTML='<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Food spent per day against the daily limit">'+g+bars+lines+lab+'</svg>';
+    var st=(cyc?'This cycle: ':'Last 60 days: ')+fmt(spent)+' on food, '+fmt(spent/Math.max(1,days))+' a day over the '+days+(days===1?' day':' days')+' you logged';
+    st+=limit>0?' · over your '+fmt(limit)+' limit on '+over+' of them':' · set a food limit to compare';
+    if(cyc) st+=' · '+R.days+(R.days===1?' day':' days')+' left, today included';
+    $('#fd-stats').textContent=st;
+  }
 
   // ---------------------------------------------------------------- savings outlook
   /* Where Pay myself goes over the coming months. Each month: salary in, then Mama,

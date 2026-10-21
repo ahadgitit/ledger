@@ -98,6 +98,8 @@ python3 -m http.server 8000
 - **Explorer** is an object browser for transactions and items. It has facets (category, payment mode, amount, scope), sortable columns, and an inspector that shows each object's properties, linked item, history and a link to its row in the sheet.
 - **Forecast** is a budget for the rest of the current payday cycle (today until the 20th of next month, the latest payday) that answers: can this month's **Pay myself** stay untouched?
   - **Predict food or shopping.** To predict food, you must set a shopping cap. To predict shopping, you must set a food cap, either as a total or as a daily limit until payday (the other figure fills in). Neither has a default; a button fills in your usual amount if you want it.
+  - **Food limit and the days left:** a food cap covers the days left until payday, today included. Food already logged today counts toward today's limit, and food from earlier days is already out of Remaining.
+  - **Food per day:** what you spent on food each day, this cycle or over the last 60 days, against your daily limit (the cap per day, or the predicted daily food budget) and your usual. Days over the limit are marked. Averages count only days you logged something.
   - **Food graph**: what you spent on food in each past month. A dashed line marks your food cap, or the food budget it predicts.
   - **Bills and subscriptions** (Claude, internet, Amazon, foodpanda, YouTube, and any you add): amounts are editable and start from what you last paid. Tick the ones still to pay.
   - **Monthly essentials** (laundry, grooming and toiletries, and any you add): each starts at your average for this many days over past months, and each can be edited.
