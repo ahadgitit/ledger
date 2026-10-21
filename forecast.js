@@ -475,7 +475,7 @@ var Forecast=(function(){
         var A=Logic.aggregate(c),pm=c.tx.filter(function(t){return t.cat==='savings';}).reduce(function(a,t){return a+t.amt;},0);
         row.kind=c.open?'open':'tracked';row.spent=A.spent;row.by=A.by;row.other=A.other;
         row.saved=i.saved!=null?i.saved:pm>0?(prevPM!=null?pm-prevPM:pm):0;
-        row.first=pm>0&&prevPM==null&&i.saved==null;
+        row.first=pm>0&&prevPM==null&&i.saved==null;row.pm=pm>0?pm:null;
         prevPM=pm>0?pm:prevPM;
       }else{
         row.saved=i.saved!=null?i.saved:null;
@@ -514,14 +514,15 @@ var Forecast=(function(){
     var box=$('#cf-chart');if(!box||!CF||!CF.length) return;
     var sel=cfSel(),n=CF.length;
     // the year so far
-    var rec=0,spent=0,saved=0,recS=0,months=0;
-    CF.forEach(function(r){if(r.received!=null) rec+=r.received;if(r.kind==='tracked'||r.kind==='open') spent+=r.spent;if(r.saved!=null&&r.received!=null){saved+=r.saved;recS+=r.received;months++;}});
+    // Pay myself carries over month to month, so the latest figure is everything saved
+    var rec=0,spent=0,pm=null,pmAt=null;
+    CF.forEach(function(r){if(r.received!=null) rec+=r.received;if(r.kind==='tracked'||r.kind==='open') spent+=r.spent;if(r.pm!=null){pm=r.pm;pmAt=r.key;}});
     var tile=function(k,v,sub,cls){return '<div><span>'+esc(k)+'</span><b class="'+(cls||'')+'">'+v+'</b><small>'+sub+'</small></div>';};
     $('#cf-kpis').innerHTML=
       tile('Received',esc(fmt(rec)),CF.filter(function(r){return r.received!=null;}).length+' paydays')+
       tile('Spent',esc(fmt(spent)),'in the months you tracked')+
-      tile('Saved',esc(fmtS(saved)),'to Pay myself, '+months+' months',saved<0?'neg':'')+
-      tile('Savings rate',recS?Math.round(saved/recS*100)+'<small>%</small>':'–','of pay, those months');
+      tile('Saved',pm!=null?esc(fmt(pm)):'\u2013',pm!=null?'Pay myself now, as of '+esc(ymName(pmAt,true)):'no Pay myself row yet')+
+      tile('Kept',pm!=null&&rec?Math.round(pm/rec*100)+'<small>%</small>':'\u2013','of everything you were paid');
     var W=Math.max(300,box.clientWidth),H=W<520?240:300,pl=46,pr=8,pt=26,pb=40,iw=W-pl-pr,ih=H-pt-pb;
     var mx=1;CF.forEach(function(r){mx=Math.max(mx,r.received||0,(r.spent||0)+Math.max(0,r.saved||0));});
     var stp=Viz.niceMax(mx*1.08/4),nt=Math.ceil(mx*1.08/stp),top=stp*nt,Y=function(v){return pt+ih*(1-v/top);},hY=function(v){return ih*v/top;};
