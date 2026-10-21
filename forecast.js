@@ -18,6 +18,7 @@ var Forecast=(function(){
   function $$(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s));}
   var KEY='ledger.forecast.v3';
   var PEOPLE=[{key:'touheed',label:'Touheed',what:'transport fee',fee:27000},{key:'mama',label:'Mama',what:'groceries',fee:35000}];
+  var RIDE_PRIOR=10;
   var RIDE_LV=[{k:'low',t:'Low'},{k:'avg',t:'Average'},{k:'high',t:'High'}];
   var ESS=[
     {k:'laundry',t:'Laundry',re:/laund|laubdry|dry ?clean/},
@@ -122,8 +123,14 @@ var Forecast=(function(){
     });
     for(var dd=cur.start;dd<=today;dd++) soFar+=fd[dd]||0;
     var food={byDay:fd,items:fi,logged:logged,today:fd[today]||0,soFar:soFar,passed:Math.max(0,today-cur.start),now:today};
+    /* InDrive for the rest of this cycle: your pace so far this cycle, blended with past
+       months. The pace counts for days/(days+10): about a fifth after 3 days, half after
+       10, two thirds after 20, so a couple of rides early on cannot swing it much. */
+    var rc=Logic.rides(cyc)[i],el=Math.max(1,today-cur.start+1),pace=rc.total/el,w=el/(el+RIDE_PRIOR),lvh=rideLevels(h),lvNow={};
+    RIDE_LV.forEach(function(x){lvNow[x.k]=w*pace+(1-w)*lvh[x.k];});
+    var rideNow={total:rc.total,count:rc.count,days:el,pace:pace,w:w};
     return {food:food,past:past,cur:cur,id:id,prev:i>0?cyc[i-1]:null,prevAdv:prevId?s.adv[prevId]||null:null,days:days,pay:pay,lastDay:pay-1,
-      remaining:cur.bal.remaining,saved:saved,bills:bills,ess:ess,hist:h,lv:rideLevels(h),
+      remaining:cur.bal.remaining,saved:saved,bills:bills,ess:ess,hist:h,lv:lvh,lvNow:lvNow,rideNow:rideNow,
       usual:{food:perDay(h,function(x){return x.food;}),shop:perDay(h,function(x){return x.shop;})}};
   }
   function inputs(R){
@@ -136,7 +143,7 @@ var Forecast=(function(){
   function compute(R,I){
     var bills=R.bills.reduce(function(a,b){return a+(b.on?b.amt:0);},0);
     var ess=R.ess.reduce(function(a,e){return a+(e.amt||0);},0);
-    var ride=r100(R.lv[I.ride]*R.days);
+    var ride=r100(R.lvNow[I.ride]*R.days);
     var advIn=0,adv=0;
     PEOPLE.forEach(function(p){var a=I.adv[p.key]||{};adv+=a.amt||0;if(a.logged) advIn+=a.amt||0;});
     // an advance already logged in the sheet lowered Remaining, but it is paid out of Pay myself
@@ -186,9 +193,10 @@ var Forecast=(function(){
     var ess=R.ess.map(function(e){
       return itemRow('ess',e,e.extra?'added by you':'usually '+esc(fmt(e.def))+(e.months<R.hist.length?' · in '+e.months+' of '+R.hist.length+' months':''));
     }).join('');
-    var lv=R.lv,rideSeg='<div class="seg fp-seg" role="group" aria-label="InDrive estimate">'+RIDE_LV.map(function(x){
+    var lv=R.lvNow,rideSeg='<div class="seg fp-seg" role="group" aria-label="InDrive estimate">'+RIDE_LV.map(function(x){
       return '<button type="button" data-ride="'+x.k+'" aria-pressed="'+(I.ride===x.k)+'">'+x.t+'<small>'+esc(fmt(r100(lv[x.k]*d)))+'</small></button>';}).join('')+'</div>';
-    var rhist=R.hist.map(function(x){return '<span>'+esc(x.name.slice(0,3))+' <b>'+esc(fmt(x.ride))+'</b></span>';}).join('');
+    var rhist=R.hist.map(function(x){return '<span>'+esc(x.name.slice(0,3))+' <b>'+esc(fmt(x.ride))+'</b></span>';}).join('')+
+      '<span class="fp-now">'+esc(R.cur.name.slice(0,3))+' so far <b>'+esc(fmt(R.rideNow.total))+'</b></span>';
     var shist=R.hist.map(function(x){return '<span>'+esc(x.name.slice(0,3))+' <b>'+esc(fmt(x.shop))+'</b></span>';}).join('');
     var adv=PEOPLE.map(function(p){
       var a=I.adv[p.key]||{},fee=I.fees[p.key]!=null?I.fees[p.key]:p.fee;
@@ -235,8 +243,8 @@ var Forecast=(function(){
         '<p class="fc-note">You usually spend about '+esc(fmt(R.usual.food))+' a day on food, about '+esc(fmt(usualFood))+' over these '+d+' days. Lighter bars are months with untracked catch-up rows, so they were really higher.</p>',{cls:''})+
       ui.pnl('fp-bills','Bills and subscriptions','tick the ones still to pay',bills+
         '<div class="fp-foot"><button type="button" class="btn sm" data-add="bill">+ Add bill</button><span class="fp-tot">Still to pay <b id="fp-bills-t"></b></span></div>',{cls:''})+
-      ui.pnl('fp-ride','InDrive','your rate from past months × '+d+' days',rideSeg+'<div class="fp-hist">'+rhist+'</div>'+
-        '<p class="fc-note">Low and high are the averages of your cheaper and dearer months. Rides you already took this month are in Remaining.</p>',{cls:''})+
+      ui.pnl('fp-ride','InDrive','your pace this cycle and past months × '+d+' days',rideSeg+'<div class="fp-hist">'+rhist+'</div>'+
+        '<p class="fc-note">This cycle so far: '+esc(fmt(R.rideNow.total))+' in '+R.rideNow.count+' ride'+(R.rideNow.count===1?'':'s')+' over '+R.rideNow.days+' day'+(R.rideNow.days===1?'':'s')+' ('+esc(fmt(R.rideNow.pace))+' a day). That pace counts for '+Math.round(R.rideNow.w*100)+'% of each estimate, more as the cycle goes on; the rest is your past months, where low and high are the averages of your cheaper and dearer months. Rides already taken are out of Remaining.</p>',{cls:''})+
       '</div><div class="fp-col">'+
       ui.pnl('fp-shop','Shopping and outfits','clothes, perfume, gifts, gadgets',
         (foodMode?capBox('shop',usualShop):result('shop'))+
