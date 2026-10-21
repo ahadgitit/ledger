@@ -840,7 +840,9 @@ var Forecast=(function(){
           .concat(R.ess.map(function(e){return [e.key==='groom'?'Toiletries':e.label||'Other',e.key==='groom'?r.groom:(e.amt||0)*k*f];}))
           .concat([['InDrive',P.parts.ride*f],['Shopping',r.shop],['Bills and subscriptions',r.bills]]).concat(r.planned?[['Planned expense',r.planned]]:[]);
         var tot=items.reduce(function(a2,x){return a2+x[1];},0);
-        h='<div class="tt-h">'+esc(r.m.name+' '+r.m.year)+' cycle</div><div class="tt-b">Pay myself likely '+esc(fmt(r100(b.p50)))+' <span class="tt-r">('+esc(K(b.p10))+'\u2013'+esc(K(b.p90))+')</span><br>Salary '+esc(fmt(r.salary))+'</div>'+
+        h='<div class="tt-h">'+esc(r.m.name+' '+r.m.year)+' cycle</div><div class="tt-b">Pay myself likely '+esc(fmt(r100(b.p50)))+' <span class="tt-r">('+esc(K(b.p10))+'\u2013'+esc(K(b.p90))+')</span>'+
+          // built on the month before: this cycle's actual Pay myself for the first month, the likely one after that
+          '<br>= '+(j?esc(rows[j-1].m.name)+' likely '+esc(fmt(r100(B[j-1].p50))):esc(R.cur.name)+' actual '+esc(fmt(r100(S.start.bal))))+' + saved '+esc(fmtS(r.saveP50))+'<br>Salary '+esc(fmt(r.salary))+'</div>'+
           '<dl class="tt-g">'+items.filter(function(x){return x[1]>0;}).map(function(x){return '<dt>'+esc(x[0])+'</dt><dd>'+esc(fmt(r100(x[1])))+'</dd>';}).join('')+
           (Math.abs(r.salary-tot-r.saveP50)>=100?'<dt>'+(r.salary-tot-r.saveP50>0?'Ups and downs, surprise buys':'Likely a bit under plan')+'</dt><dd>'+esc(fmtS(r100(r.salary-tot-r.saveP50)))+'</dd>':'')+
           '<dt class="tt-t">Expenses</dt><dd class="tt-t">'+esc(fmt(r100(r.salary-r.saveP50)))+'</dd><dt class="tt-t">Saved about</dt><dd class="tt-t">'+esc(fmtS(r100(r.saveP50)))+'</dd></dl>';}
@@ -858,6 +860,8 @@ var Forecast=(function(){
     // month by month
     $('#ol-table').innerHTML='<thead><tr><th>Cycle</th><th class="n">Salary</th><th class="n">Mama + Touheed</th><th class="n">Bills</th><th class="n">Spending</th><th class="n">Shopping</th><th class="n">Planned</th><th class="n">Saved (likely)</th><th class="n">Pay myself</th></tr></thead><tbody>'+
       R.past.filter(function(p){return p.day!==R.cur.start;}).map(function(p){return '<tr class="ol-rec"><td>'+esc(p.full)+' <small>recorded</small></td><td class="n" colspan="7"></td><td class="n">'+esc(fmt(p.saved))+'</td></tr>';}).join('')+
+      // this cycle: the actual Pay myself the first projected month builds on
+      '<tr class="ol-rec ol-now-row"><td>'+esc(R.cur.name)+' <small>now, actual'+(S.start.bal!==R.saved?', less advances':'')+'</small></td><td class="n" colspan="7"></td><td class="n">'+esc(fmt(S.start.bal))+'</td></tr>'+
       rows.map(function(r,i){return '<tr><td>'+esc(r.m.name+' '+r.m.year)+'</td><td class="n">'+esc(fmt(r.salary))+'</td><td class="n">'+esc(fmt(r.mama+r.touheed))+'</td><td class="n">'+esc(fmt(r.bills))+'</td><td class="n">'+esc(fmt(r100(r.spend)))+'</td><td class="n'+(r.shop>S.limit?' ol-over':'')+'">'+esc(fmt(r.shop))+'</td><td class="n">'+(r.planned?esc(fmt(r.planned)):'–')+'</td><td class="n">'+esc(fmtS(r100(r.saveP50)))+'</td><td class="n">'+esc(fmt(r100(B[i].p50)))+'</td></tr>';}).join('')+'</tbody>';
   }
 

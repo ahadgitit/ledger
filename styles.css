@@ -736,7 +736,7 @@ body.gated .ctx,body.gated .tabs{display:none}
 .ol-nowt{font-size:9.5px;letter-spacing:.08em}
 .ol-ax.ol-cur{fill:var(--ink);font-weight:600}
 .sw.ol-actsw{background:var(--ink)}
-.ol-rec td{color:var(--ink-2)}.ol-rec small{font-size:10.5px;color:var(--muted);margin-left:4px}
+.ol-rec td{color:var(--ink-2)}.ol-now-row td{color:var(--ink);border-bottom:1px solid var(--line-2)}.ol-rec small{font-size:10.5px;color:var(--muted);margin-left:4px}
 .ol-plm{fill:var(--c4)}
 .ol-hit{fill:transparent;cursor:crosshair;touch-action:pan-y}
 .sw.ol-bandsw{background:rgba(57,135,229,.35)}
