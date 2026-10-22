@@ -791,7 +791,11 @@ var Forecast=(function(){
     var asc=function(a,b){return a-b;};
     var band=paths.map(function(a){a.sort(asc);return {p10:q(a,0.1),p25:q(a,0.25),p50:q(a,0.5),p75:q(a,0.75),p90:q(a,0.9)};});
     // saved each month is the step between likely balances, so last month's Pay myself plus this month's saving is this month's Pay myself
-    rows.forEach(function(row,i){row.saveP50=r100(band[i].p50)-r100(i?band[i-1].p50:st0.bal);});
+    /* the likely path is each month's plan less the surprise buys you can expect in a month: a share of your
+       limit when you set one (never more than it), otherwise your history. Ups and downs average out, so they
+       widen the range but do not move this path; each month's saving is exactly the step to the next. */
+    var expSurprise=!O.lumps?0:lumpLim!=null?pSurprise*lumpLim*0.65:lam*(lumps.length?mean(lumps):0),cum=r100(st0.bal);
+    rows.forEach(function(row,i){row.surprise=expSurprise;row.saveP50=r100(row.save-expSurprise);cum+=row.saveP50;band[i].p50=cum;});
     return {O:O,P:P,lv:lv,rows:rows,band:band,start:st0,lam:lam,pSurprise:pSurprise,lumpLim:lumpLim,lumpAvg:lumps.length?mean(lumps):0,spread:ratios,limit:limit,planMonthly:planMonthly};
   }
 
@@ -900,7 +904,7 @@ var Forecast=(function(){
           // built on the month before: this cycle's actual Pay myself for the first month, the likely one after that
           '<br>= '+(j?esc(rows[j-1].m.name)+' likely '+esc(fmt(r100(B[j-1].p50))):esc(R.cur.name)+(S.start.dip<0?' likely (recommended) ':' actual ')+esc(fmt(r100(S.start.bal))))+' + saved '+esc(fmtS(r.saveP50))+'<br>Salary '+esc(fmt(r.salary))+(r.inflow?' + money in '+esc(fmt(r.inflow)):'')+'</div>'+
           '<dl class="tt-g">'+items.filter(function(x){return x[1]>0;}).map(function(x){return '<dt>'+esc(x[0])+'</dt><dd>'+esc(fmt(r100(x[1])))+'</dd>';}).join('')+
-          (Math.abs(r.salary+r.inflow-tot-r.saveP50)>=100?'<dt>'+(r.salary+r.inflow-tot-r.saveP50>0?'Ups and downs, surprise buys':'Likely a bit under plan')+'</dt><dd>'+esc(fmtS(r100(r.salary+r.inflow-tot-r.saveP50)))+'</dd>':'')+
+          (r.surprise>=50?'<dt>Surprise buys, likely'+(S.lumpLim!=null?' (limit '+esc(K(S.lumpLim))+')':'')+'</dt><dd>'+esc(fmt(r100(r.surprise)))+'</dd>':'')+
           '<dt class="tt-t">Expenses</dt><dd class="tt-t">'+esc(fmt(r100(r.salary+r.inflow-r.saveP50)))+'</dd><dt class="tt-t">Saved about</dt><dd class="tt-t">'+esc(fmtS(r100(r.saveP50)))+'</dd></dl>';}
       cross.setAttribute('x1',cx);cross.setAttribute('x2',cx);cross.removeAttribute('hidden');
       hov.setAttribute('cx',cx);hov.setAttribute('cy',cy.toFixed(1));hov.removeAttribute('hidden');
