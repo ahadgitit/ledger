@@ -48,13 +48,15 @@ var Forecast=(function(){
     for(var i=Math.max(0,cyc.length-7);i<cyc.length-1;i++){
       var c=cyc[i],len=cyc[i+1].start-c.start;
       if(len<14) continue;
-      var h={name:c.name,len:len,food:0,shop:0,untracked:0,ride:rides[i].total,ess:{},lumps:[]};
+      var h={name:c.name,len:len,food:0,shop:0,untracked:0,ride:rides[i].total,rides:rides[i].count,ess:{},lumps:[],fi:{},si:{},logged:{}};
       ESS.forEach(function(e){h.ess[e.k]=0;});
       c.tx.forEach(function(t){
+        if(t.day!=null) h.logged[t.day]=1;
         if(!(t.amt>0)) return;
         var cat=t.cat,s=(t.name+' '+t.desc).toLowerCase();
-        if(cat==='food'){h.food+=t.amt;return;}
-        if(cat==='shopping'){h.shop+=t.amt;return;}
+        var nm=t.name.trim().toLowerCase(),add=function(m){var e=m[nm]||(m[nm]={name:t.name.trim(),amt:0,n:0});e.amt+=t.amt;e.n++;};
+        if(cat==='food'){h.food+=t.amt;add(h.fi);return;}
+        if(cat==='shopping'){h.shop+=t.amt;add(h.si);return;}
         if(cat==='untracked'){h.untracked+=t.amt;return;}
         // not everyday spending: savings, money moved, Touheed, Mama, renovation, bills, rides
         if(/^(savings|transfer|influx|loaned|family\/home|renovation)$/.test(cat)) return;
@@ -296,7 +298,7 @@ var Forecast=(function(){
         '<p>Predict food: your shopping cap is taken off too, and what is left is for food. Predict shopping: your food cap is taken off, and what is left is for shopping.</p>'+
         '<p>An advance to Touheed or Mama is paid out of Pay myself: lower Pay myself in the sheet when you pay it. It does not touch this budget, and at the next payday you owe that much less, which the savings outlook counts as saved. If you also logged the advance as an entry, Remaining went down by it, so it is added back here.</p>'+
         '<p>What you enter here is kept in this browser.</p></details>'+
-      cfView(M)+outlookView()+
+      cfView(M)+outlookView()+planView()+
     '</div>';
   }
 
@@ -324,6 +326,8 @@ var Forecast=(function(){
         else if(o.dataset.out==='shop') s.shopLimit=ov;
         else if(o.dataset.out==='lumplim') s.lumpLimit=ov;
         else if(o.dataset.out==='groom') s.groomAlt=t.checked;
+        else if(o.dataset.out==='goal') s.goal=ov;
+        else if(o.dataset.out==='goalm') s.goalYm=t.value;
         else s.lumps=t.checked;
         save();update();return;
       }
@@ -804,7 +808,7 @@ var Forecast=(function(){
       row.surprise=bound>0?r100(bound*(2*Math.pow(rs(),a)-1)):0;
       row.saveP50=r100(row.save-row.surprise);cum+=row.saveP50;band[i].p50=cum;
     });
-    return {O:O,P:P,lv:lv,rows:rows,band:band,start:st0,lam:lam,pSurprise:pSurprise,lumpLim:lumpLim,lumpAvg:lumps.length?mean(lumps):0,spread:ratios,limit:limit,planMonthly:planMonthly};
+    return {O:O,P:P,lv:lv,rows:rows,band:band,start:st0,expSurprise:expSurprise,gMonth:gMonth,plan:plan,inflow:inflow,lam:lam,pSurprise:pSurprise,lumpLim:lumpLim,lumpAvg:lumps.length?mean(lumps):0,spread:ratios,limit:limit,planMonthly:planMonthly};
   }
 
   function outlookView(){
@@ -839,6 +843,81 @@ var Forecast=(function(){
         inflows+'<div class="fp-foot"><button type="button" class="btn sm" data-add="inflow">+ Add planned money in</button><span class="fp-tot" id="ol-innote"></span></div></div>'+
       '<details class="notes ol-tbl"><summary>Month by month</summary><div class="tbl-w"><table class="tbl" id="ol-table"></table></div></details>'+
     '</div></section>';
+  }
+
+  // ---------------------------------------------------------------- savings plan
+  function planView(){
+    var s=load(),M=months(12);
+    var opts=M.map(function(m){return '<option value="'+m.ym+'"'+(m.ym===s.goalYm?' selected':'')+'>'+m.name+' '+m.year+'</option>';}).join('');
+    return '<section class="pnl sp" id="fp-plan"><header class="pnl-h"><span class="pnl-t"><i class="pnl-dot"></i>Savings plan</span><span class="pnl-m">what you save, what you could, and your goal</span></header><div class="pnl-b">'+
+      '<div class="ol-stats" id="sp-stats"></div>'+
+      '<p class="ol-month" id="sp-lead"></p>'+
+      '<div class="ol-sub"><div class="ol-subh"><span class="lbl">Where to cut, a month</span><small class="ol-hint">fixed costs (Mama, Touheed, bills, laundry, toiletries) left as they are</small></div><ul class="sp-cuts" id="sp-cuts"></ul></div>'+
+      '<div class="ol-sub"><div class="ol-subh"><span class="lbl">Your goal</span></div>'+
+        '<div class="sp-goal"><div class="fld" data-out="goal"><span class="lbl">Pay myself to reach</span>'+money(s.goal,'','e.g. 500,000')+'</div>'+
+        '<div class="fld" data-out="goalm"><span class="lbl">By</span><select class="inline ol-m" aria-label="By">'+(s.goalYm?'':'<option value="" selected>Pick a month</option>')+opts+'</select></div></div>'+
+        '<div id="sp-goal-r"></div></div>'+
+    '</div></section>';
+  }
+  function drawPlan(I,C,S){
+    var box=$('#fp-plan');if(!box) return;
+    var O=S.O,P=S.P,rows=S.rows,H=rows.length,s=load(),asc=function(a,b){return a-b;};
+    // an average month in the outlook: saved out of everything coming in
+    var cashIn=rows.reduce(function(a,r){return a+r.salary+r.inflow;},0),saved=rows.reduce(function(a,r){return a+r.saveP50;},0);
+    var rate=cashIn>0?saved/cashIn:0;
+    // modest: food, shopping and InDrive at the average of your cheaper half of past months, no surprise buys
+    var days=R.hist.reduce(function(a,x){return a+x.len;},0)||1;
+    // months with far fewer days logged than usual look under-logged, not modest, so they are left out here
+    var cover=R.hist.map(function(x){return Object.keys(x.logged).length/x.len;}),mc=cover.slice().sort(asc)[Math.floor(cover.length/2)];
+    var full=R.hist.filter(function(x,i){return cover[i]>=mc*0.6;}),thin=R.hist.length-full.length;
+    var cheap=function(f){var a=full.map(function(x){return f(x)/x.len*MDAYS;}).sort(asc),h=Math.max(1,Math.floor(a.length/2));return mean(a.slice(0,h));};
+    var now={food:P.parts.food*S.lv,shop:shopMean(S.limit),ride:P.parts.ride*S.lv,surprise:S.expSurprise};
+    var modest={food:Math.min(now.food,cheap(function(x){return x.food;})),shop:Math.min(now.shop,cheap(function(x){return x.shop;})),ride:Math.min(now.ride,cheap(function(x){return x.ride;})),surprise:0};
+    var essM=P.parts.ess*S.lv-(O.groomAlt?S.gMonth/2:0),fixed=P.mama+P.touheed+P.bills+essM;
+    var usual=O.base-fixed-now.food-now.shop-now.ride-now.surprise,best=O.base-fixed-modest.food-modest.shop-modest.ride;
+    var rec=Math.floor(best/500)*500;
+    var pc=function(v,of){return of>0?Math.round(v/of*100)+'%':'–';};
+    var tile=function(k,v,sub,cls){return '<div><span>'+esc(k)+'</span><b class="'+(cls||'')+'">'+v+'</b><small>'+sub+'</small></div>';};
+    $('#sp-stats').innerHTML=
+      tile('You save, an average month',esc(pc(saved/H,cashIn/H)),'about '+esc(fmt(r100(saved/H)))+' of '+esc(fmt(r100(cashIn/H)))+' coming in, over the next '+H+' months',saved<0?'neg':'')+
+      tile('Recommended, going modest',esc(fmt(rec)),pc(rec,O.base)+' of your '+esc(fmt(O.base))+' base salary')+
+      tile('That is more a month',esc(fmtS(r100(best-usual))),'than your usual month ('+esc(fmt(r100(usual)))+')');
+    $('#sp-lead').innerHTML='Going modest means food, shopping and InDrive at what your cheaper half of past months cost, and no surprise buys. You have done it before, so it is realistic'+(thin?' ('+thin+' month'+(thin===1?'':'s')+' with few days logged left out)':'')+': base '+esc(fmt(O.base))+
+      ' − Mama, Touheed, bills and essentials '+esc(fmt(r100(fixed)))+' − food '+esc(fmt(r100(modest.food)))+' − shopping '+esc(fmt(r100(modest.shop)))+' − InDrive '+esc(fmt(r100(modest.ride)))+' = <b>'+esc(fmt(r100(best)))+'</b>.';
+    // where the difference is, biggest first, with what drives it
+    var top=function(key){
+      var m={};R.hist.forEach(function(x){Object.keys(x[key]).forEach(function(k){var e=x[key][k],t=m[k]||(m[k]={name:e.name,amt:0,n:0});t.amt+=e.amt;t.n+=e.n;});});
+      return Object.keys(m).map(function(k){return m[k];}).sort(function(a,b){return b.amt-a.amt;}).slice(0,3)
+        .map(function(e){var per=MDAYS/days;return esc(e.name)+' '+esc(fmt(r100(e.amt*per)))+' ('+Math.max(1,Math.round(e.n*per))+'×)';}).join(', ');
+    };
+    var lumps=[];R.hist.forEach(function(x){lumps=lumps.concat(x.lumps);});
+    var rideN=R.hist.reduce(function(a,x){return a+x.rides;},0)*MDAYS/days;
+    var cuts=[
+      {k:'Food',now:now.food,to:modest.food,why:'Biggest each month: '+top('fi')+'.'},
+      {k:'Shopping',now:now.shop,to:modest.shop,why:(top('si')?'Biggest each month: '+top('si')+'. ':'')+(now.shop-modest.shop>=100?'Lower your shopping limit in the outlook to '+fmt(Math.ceil(modest.shop/1000)*1000)+' to plan for it.':'Your shopping limit already matches your cheaper months.')},
+      {k:'InDrive',now:now.ride,to:modest.ride,why:'About '+rideN.toFixed(0)+' rides a month. Fewer one-off trips, and Touheed for office days, brings it to your cheaper months.'},
+      {k:'Surprise buys',now:now.surprise,to:0,why:lumps.length?lumps.length+' one-off buys of Rs 10,000+ in your last '+R.hist.length+' months, the biggest '+fmt(Math.max.apply(null,lumps))+'. Wait a month before any big buy, or plan it as a planned expense.':'Keep big one-off buys planned rather than sudden.'}
+    ].map(function(c){c.cut=Math.max(0,c.now-c.to);return c;}).sort(function(a,b){return b.cut-a.cut;});
+    $('#sp-cuts').innerHTML=cuts.map(function(c){
+      return '<li><div class="sp-h"><b>'+esc(c.k)+'</b><span>'+esc(fmt(r100(c.now)))+' → '+esc(fmt(r100(c.to)))+'</span><em class="'+(c.cut>=100?'':'sp-0')+'">'+(c.cut>=100?'save '+esc(fmt(r100(c.cut))):'already modest')+'</em></div><p>'+c.why+'</p></li>';
+    }).join('');
+    // the goal: where Pay myself gets by that month, going modest and at your usual pace
+    var out=$('#sp-goal-r'),M=months(12),j=M.map(function(m){return m.ym;}).indexOf(s.goalYm);
+    if(!(s.goal>0)||j<0){out.innerHTML='<p class="fc-note">Enter how much you want in Pay myself and by when, and this shows how close going modest gets you.</p>';return;}
+    var mo=r100(S.start.bal),us=mo;
+    for(var i=0;i<=j;i++){
+      var sal=(i===0&&O.next!=null?O.next:O.base)+(S.inflow[M[i].ym]||0)-(S.plan[M[i].ym]||0);
+      var pay=i===0?rows[0].mama+rows[0].touheed:P.mama+P.touheed,b=sal-pay-P.bills-essM;
+      mo+=b-modest.food-modest.shop-modest.ride;us+=b-now.food-now.shop-now.ride-now.surprise;
+    }
+    var n=j+1,need=(s.goal-S.start.bal)/n,gap=mo-s.goal,sc=Math.max(s.goal,mo,us)*1.04,pct=Math.max(0,mo/sc*100),pu=Math.max(0,us/sc*100),pg=s.goal/sc*100;
+    var when=M[j].name+' '+M[j].year;
+    out.innerHTML='<div class="sp-bar" role="img" aria-label="Going modest reaches '+Math.round(mo/s.goal*100)+'% of your goal"><i class="sp-mo" style="width:'+pct.toFixed(1)+'%"></i><i class="sp-us" style="width:'+pu.toFixed(1)+'%"></i><b class="sp-gl" style="left:'+pg.toFixed(1)+'%"></b></div>'+
+      '<div class="legend sm"><span><i class="sw c3"></i>Going modest '+esc(fmt(r100(mo)))+'</span><span><i class="sw cn"></i>Usual pace '+esc(fmt(r100(us)))+'</span><span><i class="sw sp-glsw"></i>Goal '+esc(fmt(s.goal))+'</span></div>'+
+      '<p class="sp-verdict '+(gap>=0?'good':'short')+'">'+(gap>=0
+        ?'Going modest, Pay myself reaches about <b>'+esc(fmt(r100(mo)))+'</b> by '+esc(when)+': your goal, with <b>'+esc(fmt(r100(gap)))+'</b> to spare.'+(us>=s.goal?' Even your usual pace gets there.':' At your usual pace you would reach '+esc(fmt(r100(us)))+', '+esc(fmt(r100(s.goal-us)))+' short.')
+        :'Going modest, Pay myself reaches about <b>'+esc(fmt(r100(mo)))+'</b> by '+esc(when)+', <b>'+Math.round(mo/s.goal*100)+'%</b> of your goal and '+esc(fmt(r100(-gap)))+' short. Hitting it needs about '+esc(fmt(r100(need)))+' saved a month for '+n+' month'+(n===1?'':'s')+'; going modest saves about '+esc(fmt(r100((mo-S.start.bal)/n)))+'. A later month, a planned money-in, or cutting deeper would close the gap.')+
+      '</p>';
   }
 
   var UIref=null;
@@ -937,6 +1016,7 @@ var Forecast=(function(){
       // this cycle: the actual Pay myself the first projected month builds on
       '<tr class="ol-rec ol-now-row"><td>'+esc(R.cur.name)+' <small>'+(S.start.dip<0?'now, recommended (actual '+esc(fmt(R.saved))+', less the shortfall)':'now, actual')+'</small></td><td class="n" colspan="8"></td><td class="n">'+esc(fmt(S.start.bal))+'</td></tr>'+
       rows.map(function(r,i){return '<tr><td>'+esc(r.m.name+' '+r.m.year)+'</td><td class="n">'+esc(fmt(r.salary))+'</td><td class="n">'+esc(fmt(r.mama+r.touheed))+'</td><td class="n">'+esc(fmt(r.bills))+'</td><td class="n">'+esc(fmt(r100(r.spend)))+'</td><td class="n'+(r.shop>S.limit?' ol-over':'')+'">'+esc(fmt(r.shop))+'</td><td class="n">'+(r.planned?esc(fmt(r.planned)):'–')+'</td><td class="n">'+(r.inflow?'+'+esc(fmt(r.inflow)):'–')+'</td><td class="n">'+esc(fmtS(r100(r.saveP50)))+'</td><td class="n">'+esc(fmt(r100(B[i].p50)))+'</td></tr>';}).join('')+'</tbody>';
+    drawPlan(I,C,S);
   }
 
   // a bill's estimate for a cycle, shared with the Overview
