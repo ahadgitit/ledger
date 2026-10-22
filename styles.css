@@ -905,3 +905,9 @@ body.gated .ctx,body.gated .tabs{display:none}
 .sp-fixed .tot dt,.sp-fixed .tot dd{color:var(--ink);font-weight:600}
 
 .ol-hov.ol-hovp{fill:var(--warning)}
+
+.sp-how{margin-top:12px;padding:10px 12px;border-radius:var(--r);background:var(--raise)}
+.sp-howh{font:600 10.5px var(--font-ui);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.sp-how>p{margin:6px 0 0;font-size:13px;color:var(--ink)}
+.sp-how .sp-notes{margin:8px 0}
+.sp-how b.sp-warning{color:var(--warning)}.sp-how b.sp-critical{color:var(--critical)}.sp-how b.sp-good{color:var(--good)}
