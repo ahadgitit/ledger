@@ -795,7 +795,15 @@ var Forecast=(function(){
        limit when you set one (never more than it), otherwise your history. Ups and downs average out, so they
        widen the range but do not move this path; each month's saving is exactly the step to the next. */
     var expSurprise=!O.lumps?0:lumpLim!=null?pSurprise*lumpLim*0.65:lam*(lumps.length?mean(lumps):0),cum=r100(st0.bal);
-    rows.forEach(function(row,i){row.surprise=expSurprise;row.saveP50=r100(row.save-expSurprise);cum+=row.saveP50;band[i].p50=cum;});
+    /* each month gets its own figure for ups and downs and surprise buys, anywhere from the limit under plan to the
+       limit over it (your typical surprise buy when no limit is set). It leans over plan just enough that, month
+       after month, it averages out to the surprise buys you can expect, and stays the same each time you look. */
+    var bound=O.lumps?(lumpLim!=null?lumpLim:(lumps.length?mean(lumps):0)):0;
+    var ex=bound>0?Math.min(0.95,expSurprise/bound):0,a=2/(1+ex)-1,rs=rng(R.id*13+5);
+    rows.forEach(function(row,i){
+      row.surprise=bound>0?r100(bound*(2*Math.pow(rs(),a)-1)):0;
+      row.saveP50=r100(row.save-row.surprise);cum+=row.saveP50;band[i].p50=cum;
+    });
     return {O:O,P:P,lv:lv,rows:rows,band:band,start:st0,lam:lam,pSurprise:pSurprise,lumpLim:lumpLim,lumpAvg:lumps.length?mean(lumps):0,spread:ratios,limit:limit,planMonthly:planMonthly};
   }
 
@@ -856,10 +864,16 @@ var Forecast=(function(){
     var past=R.past,A=past.length,isCur=A>0&&past[A-1].day===R.cur.start,s0=isCur?A-1:A,N=s0+H;
     var W=Math.max(280,box.clientWidth),Hh=W<520?220:260,pl=46,pr=14,pt=14,pb=28,iw=W-pl-pr,ih=Hh-pt-pb;
     var vals=past.map(function(p){return p.saved;}).concat([S.start.bal]);
-    var lo=Math.min(0,Math.min.apply(null,vals.concat(B.map(function(b){return b.p10;})))),hi=Math.max.apply(null,vals.concat(B.map(function(b){return b.p90;})));
-    var top=Viz.niceMax(hi*1.05),bot=lo<0?-Viz.niceMax(-lo*1.1):0;
+    var lo=Math.min(0,Math.min.apply(null,vals.concat(B.map(function(b){return b.p10;})))),hi=Math.max.apply(null,vals.concat(B.map(function(b){return Math.max(b.p90,b.p50);})));
+    // a tight top: of the round steps (1, 2, 2.5 or 5 × 10ⁿ) giving 3 to 9 gridlines, the one whose top sits closest above the highest value
+    var span=Math.max(1,hi-Math.min(0,lo)),mag=Math.pow(10,Math.floor(Math.log10(span/9))),best=null;
+    [1,2,2.5,5,10,20,25,50].forEach(function(f){
+      var st=f*mag,tp=Math.ceil(hi*1.005/st)*st,bt=lo<0?-Math.ceil(-lo*1.05/st)*st:0,n=Math.round((tp-bt)/st);
+      if(n>=3&&n<=Math.max(3,Math.min(9,Math.floor(ih/22)))&&(!best||tp-bt<best.top-best.bot)) best={step:st,top:tp,bot:bt};
+    });
+    var step=best.step,top=best.top,bot=best.bot;
     var X=function(i){return pl+iw*i/Math.max(1,N);},Y=function(v){return pt+ih*(1-(v-bot)/(top-bot));};
-    var g='',ticks=4;
+    var g='',ticks=Math.round((top-bot)/step);
     for(var t=0;t<=ticks;t++){var v=bot+(top-bot)*t/ticks;g+='<line class="ol-grid'+(Math.abs(v)<1e-6?' zero':'')+'" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+Y(v).toFixed(1)+'" y2="'+Y(v).toFixed(1)+'"/><text class="ol-ax" x="'+(pl-6)+'" y="'+(Y(v)+3.5).toFixed(1)+'" text-anchor="end">'+esc(K(v))+'</text>';}
     if(bot<0) g+='<line class="ol-grid zero" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+Y(0).toFixed(1)+'" y2="'+Y(0).toFixed(1)+'"/>';
     // a divider where the record ends and the projection begins
@@ -904,7 +918,7 @@ var Forecast=(function(){
           // built on the month before: this cycle's actual Pay myself for the first month, the likely one after that
           '<br>= '+(j?esc(rows[j-1].m.name)+' likely '+esc(fmt(r100(B[j-1].p50))):esc(R.cur.name)+(S.start.dip<0?' likely (recommended) ':' actual ')+esc(fmt(r100(S.start.bal))))+' + saved '+esc(fmtS(r.saveP50))+'<br>Salary '+esc(fmt(r.salary))+(r.inflow?' + money in '+esc(fmt(r.inflow)):'')+'</div>'+
           '<dl class="tt-g">'+items.filter(function(x){return x[1]>0;}).map(function(x){return '<dt>'+esc(x[0])+'</dt><dd>'+esc(fmt(r100(x[1])))+'</dd>';}).join('')+
-          (r.surprise>=50?'<dt>Surprise buys, likely'+(S.lumpLim!=null?' (limit '+esc(K(S.lumpLim))+')':'')+'</dt><dd>'+esc(fmt(r100(r.surprise)))+'</dd>':'')+
+          (r.surprise?'<dt>'+(r.surprise>0?'Ups and downs, surprise buys':'Ups and downs, under plan')+(S.lumpLim!=null?' (limit '+esc(K(S.lumpLim))+')':'')+'</dt><dd>'+esc(fmtS(r.surprise))+'</dd>':'')+
           '<dt class="tt-t">Expenses</dt><dd class="tt-t">'+esc(fmt(r100(r.salary+r.inflow-r.saveP50)))+'</dd><dt class="tt-t">Saved about</dt><dd class="tt-t">'+esc(fmtS(r100(r.saveP50)))+'</dd></dl>';}
       cross.setAttribute('x1',cx);cross.setAttribute('x2',cx);cross.removeAttribute('hidden');
       hov.setAttribute('cx',cx);hov.setAttribute('cy',cy.toFixed(1));hov.removeAttribute('hidden');
