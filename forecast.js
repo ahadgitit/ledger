@@ -328,6 +328,7 @@ var Forecast=(function(){
         else if(o.dataset.out==='groom') s.groomAlt=t.checked;
         else if(o.dataset.out==='goal') s.goal=ov;
         else if(o.dataset.out==='target') s.target=ov;
+        else if(o.dataset.out==='essf-laundry'||o.dataset.out==='essf-groom'){s.essF=s.essF||{};s.essF[o.dataset.out.slice(5)]=ov;}
         else if(o.dataset.out==='cutride'){s.cutRide=t.checked;var so=$('.sp-order',root);if(so) so.textContent='Shopping is cut most, then surprise buys, then food'+(t.checked?' and InDrive':'')+'.';}
         else if(o.dataset.out==='goalm') s.goalYm=t.value;
         else s.lumps=t.checked;
@@ -718,7 +719,15 @@ var Forecast=(function(){
     var s=load();
     return {base:s.base!=null?s.base:130000,next:s.next&&s.next.id===R.id?s.next.amt:null,
       level:s.level||'same',hz:s.hz===12?12:6,lumps:s.lumps!==false,planned:s.planned||[],inflows:s.inflows||[],shopLimit:s.shopLimit!=null?s.shopLimit:null,
-      lumpLimit:s.lumpLimit!=null?s.lumpLimit:null,groomAlt:s.groomAlt!==false};
+      lumpLimit:s.lumpLimit!=null?s.lumpLimit:null,groomAlt:s.groomAlt!==false,essDef:essDef(),
+      ess:{laundry:s.essF&&s.essF.laundry!=null?s.essF.laundry:essDef().laundry,groom:s.essF&&s.essF.groom!=null?s.essF.groom:essDef().groom}};
+  }
+  /* laundry and toiletries in a coming month: yours to set, separate from this month's budget. Laundry starts at your
+     average month; toiletries at what a month you bought them usually cost (they come every other month by default) */
+  function essDef(){
+    var h=R.hist,bought=h.filter(function(x){return x.ess.groom>0;});
+    return {laundry:r100(perDay(h,function(x){return x.ess.laundry;})*MDAYS),
+      groom:r100(bought.length?mean(bought.map(function(x){return x.ess.groom/x.len*MDAYS;})):0)};
   }
   // one month of spending, from this month's plan
   function monthPlan(I,C){
@@ -727,7 +736,7 @@ var Forecast=(function(){
     var parts={
       food:!food&&I.foodCap!=null?I.foodCap*k:R.usual.food*MDAYS,
       shop:food&&I.shopCap!=null?I.shopCap*k:R.usual.shop*MDAYS,
-      ess:C.ess*k,ride:R.ride.month};
+      ess:oInputs().ess.laundry+oInputs().ess.groom,ride:R.ride.month};
     var fee=function(p){return I.fees[p.key]!=null?I.fees[p.key]:p.fee;};
     return {bills:bills,parts:parts,variable:parts.food+parts.shop+parts.ess+parts.ride,
       mama:fee(PEOPLE[1]),touheed:fee(PEOPLE[0]),
@@ -770,7 +779,8 @@ var Forecast=(function(){
       var l=0,n=poisson(lam,r);for(var k=0;k<n;k++) l+=lumps[Math.floor(r()*lumps.length)];return l;
     };
     // toiletries every other month: counted from the last cycle you bought them
-    var g=(R.ess.filter(function(e){return e.key==='groom';})[0]||{}).amt||0,gMonth=g*MDAYS/R.days*lv,since=1;
+    // a toiletries month costs what you set for coming months; this cycle's own budget only says whether it has them
+    var g=(R.ess.filter(function(e){return e.key==='groom';})[0]||{}).amt||0,gMonth=O.ess.groom*lv,since=1;
     var grRe=ESS.filter(function(e){return e.k==='groom';})[0].re;
     // this cycle has toiletries if they are logged already or planned in its budget, so the next one skips them
     if(g>0||R.cur.tx.some(function(t){return t.amt>0&&grRe.test((t.name+' '+t.desc).toLowerCase());})) since=0;
@@ -815,7 +825,7 @@ var Forecast=(function(){
   }
 
   function outlookView(){
-    var O=oInputs(),M=months(12),nm=M[0];
+    var O=oInputs(),M=months(12),nm=M[0],s=load();
     var lvSeg='<div class="seg fp-seg" role="group" aria-label="Spending in the coming months">'+LEVELS.map(function(x){
       return '<button type="button" data-level="'+x.k+'" aria-pressed="'+(O.level===x.k)+'">'+x.t+'<small>'+x.s+'</small></button>';}).join('')+'</div>';
     var hz='<div class="seg sm" role="group" aria-label="How far ahead"><button type="button" data-hz="6" aria-pressed="'+(O.hz===6)+'">6 months</button><button type="button" data-hz="12" aria-pressed="'+(O.hz===12)+'">12 months</button></div>';
@@ -840,6 +850,8 @@ var Forecast=(function(){
       '<p class="ol-month" id="ol-hist"></p><p class="ol-month" id="ol-month"></p>'+
       '<div class="ol-sub"><div class="ol-subh"><span class="lbl">Planned and surprise expenses</span><label class="fp-logged ol-lumps" data-out="lumps"><input type="checkbox"'+(O.lumps?' checked':'')+'> Allow for surprise buys</label></div>'+
         '<div class="ol-opts"><div class="fld" data-out="lumplim"><span class="lbl">Surprise buys limit a month</span>'+money(O.lumpLimit,'','From your history')+'</div>'+
+          '<div class="fld" data-out="essf-laundry"><span class="lbl">Laundry, coming months</span>'+money(s.essF&&s.essF.laundry!=null?s.essF.laundry:null,'',fmt(O.essDef.laundry).replace(/^Rs\s*/,''))+'</div>'+
+          '<div class="fld" data-out="essf-groom"><span class="lbl">Toiletries, a month you buy them</span>'+money(s.essF&&s.essF.groom!=null?s.essF.groom:null,'',fmt(O.essDef.groom).replace(/^Rs\s*/,''))+'</div>'+
           '<label class="fp-logged" data-out="groom"><input type="checkbox"'+(O.groomAlt?' checked':'')+'> Toiletries every other month</label></div>'+
         planned+'<div class="fp-foot"><button type="button" class="btn sm" data-add="plan">+ Add planned expense</button><span class="fp-tot" id="ol-lumpnote"></span></div></div>'+
       '<div class="ol-sub"><div class="ol-subh"><span class="lbl">Planned money in</span><small class="ol-hint">on top of salary: a bonus, a loan paid back, a gift</small></div>'+
@@ -942,7 +954,7 @@ var Forecast=(function(){
     // every fixed cost a month, one by one
     var k1=MDAYS/R.days,fx=[['Groceries (to Mama)',P.mama],['Transport (to Touheed)',P.touheed]]
       .concat(R.bills.filter(function(b){return b.amt>0;}).map(function(b){return [b.label||'Bill',b.amt];}))
-      .concat(R.ess.map(function(e){var v=(e.amt||0)*k1*S.lv;if(e.key==='groom'&&O.groomAlt) v/=2;return [(e.key==='groom'?'Toiletries':e.label||'Essential')+(e.key==='groom'&&O.groomAlt?' (every other month, averaged)':''),v];}).filter(function(x){return x[1]>0;}))
+      .concat([['Laundry',O.ess.laundry*S.lv],['Toiletries'+(O.groomAlt?' (every other month, averaged)':''),O.ess.groom*S.lv/(O.groomAlt?2:1)]].filter(function(x){return x[1]>0;}))
       .concat(Q.cutRide?[]:[['InDrive (likely a month)',rideM]]);
     $('#sp-fixed').innerHTML=fx.map(function(x){return '<div><dt>'+esc(x[0])+'</dt><dd>'+esc(fmt(r100(x[1])))+'</dd></div>';}).join('')+
       '<div class="tot"><dt>Fixed costs a month</dt><dd>'+esc(fmt(r100(fixed)))+'</dd></div>';
@@ -1135,7 +1147,7 @@ var Forecast=(function(){
       else{var j=i-s0-1,r=rows[j],b=B[j];cy=Y(b.p50);hovp.setAttribute('cx',cx);hovp.setAttribute('cy',Y(PL.path[j]).toFixed(1));hovp.removeAttribute('hidden');
         // that month's expected spending, item by item (the same plan the forecast uses)
         var k=MDAYS/R.days,f=S.lv,items=[['Groceries (to Mama)',r.mama],['Transport (to Touheed)',r.touheed],['Food',P.parts.food*f]]
-          .concat(R.ess.map(function(e){return [e.key==='groom'?'Toiletries':e.label||'Other',e.key==='groom'?r.groom:(e.amt||0)*k*f];}))
+          .concat([['Laundry',O.ess.laundry*f],['Toiletries',r.groom]])
           .concat([['InDrive',P.parts.ride*f],['Shopping',r.shop],['Bills and subscriptions',r.bills]]).concat(r.planned?[['Planned expense',r.planned]]:[]);
         var tot=items.reduce(function(a2,x){return a2+x[1];},0);
         h='<div class="tt-h">'+esc(r.m.name+' '+r.m.year)+' cycle</div><div class="tt-b">Pay myself likely '+esc(fmt(r100(b.p50)))+' <span class="tt-r">('+esc(K(b.p10))+'\u2013'+esc(K(b.p90))+')</span>'+
