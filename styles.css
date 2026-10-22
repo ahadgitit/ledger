@@ -726,6 +726,8 @@ body.gated .ctx,body.gated .tabs{display:none}
 .ol-ax{font:10.5px var(--font-num);fill:var(--muted)}
 .ol-band{fill:rgba(57,135,229,.2);stroke:none}
 .ol-line{fill:none;stroke:var(--c1);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.ol-pline{fill:none;stroke:var(--warning);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}.ol-pend{fill:var(--warning)}
+.sw.ol-plsw2{background:var(--warning);height:3px;border-radius:2px}.tt-pl{color:var(--warning)}
 .ol-dot{fill:var(--ink);stroke:var(--panel);stroke-width:2}
 .ol-end,.ol-hov{fill:var(--c1);stroke:var(--panel);stroke-width:2}
 .ol-cross{stroke:var(--ink-2);stroke-width:1;stroke-dasharray:3 3}
@@ -901,3 +903,5 @@ body.gated .ctx,body.gated .tabs{display:none}
 .sp-fixed dt{color:var(--ink-2)}.sp-fixed dd{margin:0;font:500 12.5px var(--font-num);color:var(--ink)}
 .sp-fixed .tot{grid-column:1/-1;border-bottom:0;border-top:1px solid var(--line-2);margin-top:4px;padding-top:7px}
 .sp-fixed .tot dt,.sp-fixed .tot dd{color:var(--ink);font-weight:600}
+
+.ol-hov.ol-hovp{fill:var(--warning)}
