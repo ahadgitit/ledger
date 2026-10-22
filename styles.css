@@ -911,3 +911,17 @@ body.gated .ctx,body.gated .tabs{display:none}
 .sp-how>p{margin:6px 0 0;font-size:13px;color:var(--ink)}
 .sp-how .sp-notes{margin:8px 0}
 .sp-how b.sp-warning{color:var(--warning)}.sp-how b.sp-critical{color:var(--critical)}.sp-how b.sp-good{color:var(--good)}
+
+/* outlook chart, full screen */
+.ol-fsb{font-size:14px;line-height:1;padding:5px 8px;margin-left:8px}
+.ol-fsh{display:none}
+.ol-fsw.on{position:fixed;z-index:50;inset:0;display:flex;flex-direction:column;gap:8px;background:var(--panel);
+  padding:max(12px,env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left))}
+.ol-fsw.on .ol-fsh{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.ol-fsw.on .ol-fsh b{font:600 13px var(--font-ui);letter-spacing:.06em;text-transform:uppercase;color:var(--ink)}
+.ol-fsw.on .ol-fsn{font-size:12px;color:var(--ink-2);margin-right:auto}
+.ol-fsw.on .ol-chart{flex:1;min-height:0;margin-top:0;overflow:hidden}
+.ol-fsw.on .ol-hit{touch-action:none}
+html.ol-fs-open,html.ol-fs-open body{overflow:hidden}
+.ol-rot{display:none}
+@media (orientation:portrait) and (max-width:600px){.ol-rot{display:inline}}

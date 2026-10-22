@@ -385,6 +385,7 @@ var Forecast=(function(){
       }
       else if(t.dataset.frange){s.frange=t.dataset.frange;save();$$('[data-frange]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});update();}
       else if(t.dataset.level){s.level=t.dataset.level;save();$$('[data-level]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});update();}
+      else if(t.dataset.olfs!=null){setOlFS(t.dataset.olfs==='1');}
       else if(t.dataset.hz){s.hz=+t.dataset.hz;save();$$('[data-hz]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});update();}
       else if(t.dataset.add==='plan'){var M=months(1);s.planned=(s.planned||[]).concat([{ym:M[0].ym,label:'',amt:0}]);save();rerender(function(){focusLast('.ol-plan .fp-lbl');});}
       else if(t.dataset.setTarget){s.target=+t.dataset.setTarget;save();var ti=$('[data-out="target"] input',root);if(ti) ti.value=s.target.toLocaleString('en-US');update();}
@@ -403,6 +404,7 @@ var Forecast=(function(){
       }
     });
     root.addEventListener('keydown',function(e){
+      if(e.key==='Escape'&&olFS){setOlFS(false);return;}
       var f=e.target.closest('[data-cf-month]');
       if(f&&e.key==='Enter'){e.preventDefault();saveIncome($('[data-cf-save]',f));}
     });
@@ -837,7 +839,7 @@ var Forecast=(function(){
     };};
     var planned=O.planned.map(planRow('planned','','What for')).join('');
     var inflows=O.inflows.map(planRow('inflows','ol-inflow','From where')).join('');
-    return '<section class="pnl ol" id="fp-out"><header class="pnl-h"><span class="pnl-t"><i class="pnl-dot"></i>Savings outlook</span><span class="pnl-m">where Pay myself is heading</span><span class="pnl-tools">'+hz+'</span></header><div class="pnl-b">'+
+    return '<section class="pnl ol" id="fp-out"><header class="pnl-h"><span class="pnl-t"><i class="pnl-dot"></i>Savings outlook</span><span class="pnl-m">where Pay myself is heading</span><span class="pnl-tools">'+hz+'<button type="button" class="btn sm ol-fsb" data-olfs="1" aria-label="Open the chart full screen" title="Full screen">⤢</button></span></header><div class="pnl-b">'+
       '<div class="ol-in">'+
         '<div class="fld" data-out="base"><span class="lbl">Base salary</span>'+money(O.base)+'</div>'+
         '<div class="fld" data-out="next"><span class="lbl">Salary on 20 '+esc(nm.name)+'</span>'+money(O.next,'','Same as base')+'</div>'+
@@ -845,8 +847,11 @@ var Forecast=(function(){
         '<div class="fld"><span class="lbl">Spending in the coming months, against this month</span>'+lvSeg+'</div>'+
       '</div>'+
       '<div class="ol-stats" id="ol-stats"></div>'+
+      '<div class="ol-fsw'+(olFS?' on':'')+'" id="ol-fsw" role="'+(olFS?'dialog':'group')+'" aria-label="Savings outlook chart">'+
+        '<div class="ol-fsh"><b>Savings outlook</b><span class="ol-fsn">drag across the chart to see each month<span class="ol-rot"> · turn your phone sideways for a wider view</span></span>'+hz+'<button type="button" class="btn sm" data-olfs="0" aria-label="Close full screen">✕</button></div>'+
       '<div class="ol-chart" id="ol-chart"></div>'+
       '<div class="legend sm"><span><i class="sw ol-actsw"></i>Recorded Pay myself</span><span><i class="sw c1"></i>Most likely</span><span><i class="sw ol-plsw2"></i>Your savings plan</span><span><i class="sw ol-bandsw"></i>Likely range (8 in 10 futures)</span><span><i class="sw ol-plansw"></i>Planned expense</span><span><i class="sw ol-insw"></i>Planned money in</span></div>'+
+      '</div>'+
       '<p class="ol-month" id="ol-hist"></p><p class="ol-month" id="ol-month"></p>'+
       '<div class="ol-sub"><div class="ol-subh"><span class="lbl">Planned and surprise expenses</span><label class="fp-logged ol-lumps" data-out="lumps"><input type="checkbox"'+(O.lumps?' checked':'')+'> Allow for surprise buys</label></div>'+
         '<div class="ol-opts"><div class="fld" data-out="lumplim"><span class="lbl">Surprise buys limit a month</span>'+money(O.lumpLimit,'','From your history')+'</div>'+
@@ -1073,6 +1078,19 @@ var Forecast=(function(){
     return h+'</div>';
   }
 
+  // the outlook chart can open full screen (most useful on a phone, turned sideways)
+  var olFS=false;
+  function setOlFS(on){
+    olFS=on;var w=$('#ol-fsw');if(!w) return;
+    w.classList.toggle('on',on);w.setAttribute('role',on?'dialog':'group');
+    document.documentElement.classList.toggle('ol-fs-open',on);
+    if(UIref) UIref.hideTip();
+    var I=inputs(R);drawOutlook(I,compute(R,I));
+    var b=$(on?'[data-olfs="0"]':'[data-olfs="1"]');if(b) b.focus();
+  }
+  var olResize=null;
+  window.addEventListener('resize',function(){if(!olFS) return;clearTimeout(olResize);olResize=setTimeout(function(){var I=inputs(R);drawOutlook(I,compute(R,I));},120);});
+
   var UIref=null;
   function drawOutlook(I,C){
     var box=$('#ol-chart');if(!box) return;
@@ -1094,7 +1112,8 @@ var Forecast=(function(){
     $('#ol-lumpnote').textContent=!O.lumps||!(S.lam>0)?'':S.lumpLim!=null?'A surprise month about '+Math.round(S.pSurprise*10)+' in 10 months, up to '+K(S.lumpLim)+' each':'Surprise buys of Rs 10,000+: about '+(Math.round(S.lam*10)/10)+' a month, '+K(S.lumpAvg)+' each (from your history)';
     // chart: recorded Pay myself for past cycles, then the projection from this cycle on
     var past=R.past,A=past.length,isCur=A>0&&past[A-1].day===R.cur.start,s0=isCur?A-1:A,N=s0+H;
-    var W=Math.max(280,box.clientWidth),Hh=W<520?220:260,pl=46,pr=14,pt=14,pb=28,iw=W-pl-pr,ih=Hh-pt-pb;
+    // full screen: as tall as the space the overlay leaves for it
+    var W=Math.max(280,box.clientWidth),Hh=olFS?Math.max(240,Math.round(box.clientHeight)):W<520?220:260,pl=46,pr=14,pt=14,pb=28,iw=W-pl-pr,ih=Hh-pt-pb;
     var vals=past.map(function(p){return p.saved;}).concat([S.start.bal]);
     var lo=Math.min(0,Math.min.apply(null,vals.concat(B.map(function(b){return b.p10;}),PL.path))),hi=Math.max.apply(null,vals.concat(B.map(function(b){return Math.max(b.p90,b.p50);}),PL.path));
     // a tight top: of the round steps (1, 2, 2.5 or 5 × 10ⁿ) giving 3 to 9 gridlines, the one whose top sits closest above the highest value
