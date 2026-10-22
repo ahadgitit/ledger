@@ -328,6 +328,7 @@ var Forecast=(function(){
         else if(o.dataset.out==='groom') s.groomAlt=t.checked;
         else if(o.dataset.out==='goal') s.goal=ov;
         else if(o.dataset.out==='target') s.target=ov;
+        else if(o.dataset.out==='cutride'){s.cutRide=t.checked;var so=$('.sp-order',root);if(so) so.textContent='Shopping is cut most, then surprise buys, then food'+(t.checked?' and InDrive':'')+'.';}
         else if(o.dataset.out==='goalm') s.goalYm=t.value;
         else s.lumps=t.checked;
         save();update();return;
@@ -858,7 +859,7 @@ var Forecast=(function(){
         '<div class="sp-goal"><div class="fld" data-out="target"><span class="lbl">Save each month, on base salary</span>'+money(s.target,'','')+'</div></div>'+
         '<div id="sp-flag"></div></div>'+
       '<div class="ol-sub"><div class="ol-subh"><span class="lbl">Fixed costs in a pay cycle</span><small class="ol-hint">counted every month and never cut</small></div><dl class="sp-fixed" id="sp-fixed"></dl></div>'+
-      '<div class="ol-sub"><div class="ol-subh"><span class="lbl">Where to cut, a month</span><small class="ol-hint">shopping first, then surprise buys, then food</small></div><ul class="sp-cuts" id="sp-cuts"></ul></div>'+
+      '<div class="ol-sub"><div class="ol-subh"><span class="lbl">Where to cut, a month</span><label class="fp-logged" data-out="cutride"><input type="checkbox"'+(s.cutRide?' checked':'')+'> Cut InDrive too</label></div><p class="fc-note sp-order">Shopping is cut most, then surprise buys, then food'+(s.cutRide?' and InDrive':'')+'.</p><ul class="sp-cuts" id="sp-cuts"></ul></div>'+
       '<div class="ol-sub"><div class="ol-subh"><span class="lbl">Month by month, against your target</span></div><div id="sp-months"></div></div>'+
       '<div class="ol-sub"><div class="ol-subh"><span class="lbl">Your goal</span></div>'+
         '<div class="sp-goal"><div class="fld" data-out="goal"><span class="lbl">Pay myself to reach</span>'+money(s.goal,'','e.g. 500,000')+'</div>'+
@@ -878,14 +879,15 @@ var Forecast=(function(){
     var cover=R.hist.map(function(x){return Object.keys(x.logged).length/x.len;}),mc=cover.slice().sort(asc)[Math.floor(cover.length/2)];
     var full=R.hist.filter(function(x,i){return cover[i]>=mc*0.6;}),thin=R.hist.length-full.length;
     var cheap=function(f){var a=full.map(function(x){return f(x)/x.len*MDAYS;}).sort(asc),h=Math.max(1,Math.floor(a.length/2));return mean(a.slice(0,h));};
-    // InDrive is not yours to cut, so it sits with the fixed costs at its likely figure for a month
-    var CATS=['food','shop','surprise'],LBL={food:'Food',shop:'Shopping',surprise:'Surprise buys'};
+    // with "Cut InDrive too" off it sits with the fixed costs at its likely month; on, it can be cut like food
+    var cutRide=!!s.cutRide,CATS=['food','shop','surprise'].concat(cutRide?['ride']:[]),LBL={food:'Food',shop:'Shopping',surprise:'Surprise buys',ride:'InDrive'};
     var now={food:P.parts.food*S.lv,shop:shopMean(S.limit),surprise:S.expSurprise},rideM=P.parts.ride*S.lv;
     var modest={food:Math.min(now.food,cheap(function(x){return x.food;})),shop:Math.min(now.shop,cheap(function(x){return x.shop;})),surprise:0};
+    if(cutRide){now.ride=rideM;modest.ride=Math.min(rideM,cheap(function(x){return x.ride;}));}
     var sum=function(o){return CATS.reduce(function(a,k){return a+o[k];},0);};
-    var essM=P.parts.ess*S.lv-(O.groomAlt?S.gMonth/2:0),other=essM+rideM,fixed=P.mama+P.touheed+P.bills+other,free=O.base-fixed;
+    var essM=P.parts.ess*S.lv-(O.groomAlt?S.gMonth/2:0),other=essM+(cutRide?0:rideM),fixed=P.mama+P.touheed+P.bills+other,free=O.base-fixed;
     // shopping bends most, surprise buys next, food least: a cut is shared by these weights, each capped at what it has room for
-    var W={shop:3,surprise:2,food:1};
+    var W={shop:3,surprise:2,food:1,ride:1};
     var share=function(amount,cap){
       var out={},left=amount,act=CATS.filter(function(k){out[k]=0;return cap[k]>0;});
       while(left>0.5&&act.length){
@@ -905,16 +907,17 @@ var Forecast=(function(){
     else{
       var cut=sum(now)-room,slack=sum(now)-sum(modest);
       // shopping and surprise buys can go all the way down; food only to your cheaper months, and below that last
-      var cap1={food:now.food-modest.food,shop:now.shop,surprise:now.surprise},c1=share(cut,cap1),got=sum(c1);
+      // InDrive, when cut, works like food: down to your cheaper months first, below that last
+      var cap1={food:now.food-modest.food,shop:now.shop,surprise:now.surprise,ride:cutRide?now.ride-modest.ride:0},c1=share(cut,cap1),got=sum(c1);
       CATS.forEach(function(k){bud[k]=now[k]-c1[k];});
-      if(cut-got>0.5) bud.food=Math.max(0,bud.food-(cut-got));
+      if(cut-got>0.5){var c2=share(cut-got,{food:bud.food,ride:cutRide?bud.ride:0});bud.food=Math.max(0,bud.food-c2.food);if(cutRide) bud.ride=Math.max(0,bud.ride-c2.ride);}
       level=cut<=slack?'modest':'deep';
     }
     // months with planned money in or a planned expense tighten to modest spending (if the target is not already tighter)
     var spend=sum(bud),mSpend=sum(modest),special=function(ym){return (S.inflow[ym]||0)>0||(S.plan[ym]||0)>0;};
     var can=S.rows.map(function(r,i){var ym=months(12)[i].ym;return r.salary+(S.inflow[ym]||0)-(S.plan[ym]||0)-r.mama-r.touheed-P.bills-other-(special(ym)?Math.min(spend,mSpend):spend);});
     var path=[],bal=r100(S.start.bal);can.forEach(function(c){bal+=c;path.push(bal);});
-    return {O:O,P:P,rows:rows,H:H,s:s,asc:asc,cashIn:cashIn,saved:saved,days:days,thin:thin,CATS:CATS,LBL:LBL,now:now,rideM:rideM,modest:modest,sum:sum,essM:essM,other:other,fixed:fixed,free:free,usual:usual,best:best,rec:rec,T:T,room:room,bud:bud,level:level,spend:spend,mSpend:mSpend,special:special,can:can,path:path};
+    return {O:O,P:P,rows:rows,H:H,s:s,asc:asc,cashIn:cashIn,saved:saved,days:days,thin:thin,CATS:CATS,LBL:LBL,now:now,rideM:rideM,modest:modest,sum:sum,essM:essM,other:other,fixed:fixed,free:free,usual:usual,best:best,rec:rec,T:T,room:room,bud:bud,level:level,cutRide:cutRide,spend:spend,mSpend:mSpend,special:special,can:can,path:path};
   }
 
   function drawPlan(I,C,S){
@@ -931,7 +934,7 @@ var Forecast=(function(){
       ' − fixed costs '+esc(fmt(r100(fixed)))+' − food '+esc(fmt(r100(modest.food)))+' − shopping '+esc(fmt(r100(modest.shop)))+' = <b>'+esc(fmt(r100(best)))+'</b>.';
     // how the target sits against your costs
     var fl={fixed:['critical','Runs into your fixed costs','After your fixed costs ('+fmt(r100(fixed))+', listed below), your base leaves '+fmt(r100(free))+'. Saving '+fmt(T)+' is '+fmt(r100(-room))+' more than that, with nothing left for food. The most you could save, eating nothing, is '+fmt(r100(free))+'; going modest it is '+fmt(rec)+'.'],
-      deep:['warning','Deeper than your cheaper months','Saving '+fmt(T)+' leaves '+fmt(r100(room))+' a month for food, shopping and surprise buys, '+fmt(r100(T-best))+' below your cheaper months. Food would be '+fmt(r100(bud.food))+' a month ('+fmt(r100(bud.food/MDAYS))+' a day), against '+fmt(r100(modest.food/MDAYS))+' a day in your cheaper months.'],
+      deep:['warning','Deeper than your cheaper months','Saving '+fmt(T)+' leaves '+fmt(r100(room))+' a month for food, shopping'+(Q.cutRide?', InDrive':'')+' and surprise buys, '+fmt(r100(T-best))+' below your cheaper months. Food would be '+fmt(r100(bud.food))+' a month ('+fmt(r100(bud.food/MDAYS))+' a day), against '+fmt(r100(modest.food/MDAYS))+' a day in your cheaper months.'],
       modest:['good','Doable','Saving '+fmt(T)+' needs '+fmt(r100(T-usual))+' a month less than your usual, no more than going modest saves. Shopping '+fmt(r100(bud.shop))+', surprise buys '+fmt(r100(bud.surprise))+', food '+fmt(r100(bud.food))+' a month ('+fmt(r100(bud.food/MDAYS))+' a day).'],
       easy:['good','Your usual month already does this','Your usual month saves about '+fmt(r100(usual))+', '+fmt(r100(usual-T))+' more than your target, without cutting anything.']}[level];
     $('#sp-flag').innerHTML='<div class="sp-flag '+fl[0]+'"><b>'+esc(fl[1])+'</b><p>'+esc(fl[2])+'</p></div>';
@@ -939,7 +942,7 @@ var Forecast=(function(){
     var k1=MDAYS/R.days,fx=[['Groceries (to Mama)',P.mama],['Transport (to Touheed)',P.touheed]]
       .concat(R.bills.filter(function(b){return b.amt>0;}).map(function(b){return [b.label||'Bill',b.amt];}))
       .concat(R.ess.map(function(e){var v=(e.amt||0)*k1*S.lv;if(e.key==='groom'&&O.groomAlt) v/=2;return [(e.key==='groom'?'Toiletries':e.label||'Essential')+(e.key==='groom'&&O.groomAlt?' (every other month, averaged)':''),v];}).filter(function(x){return x[1]>0;}))
-      .concat([['InDrive (likely a month)',rideM]]);
+      .concat(Q.cutRide?[]:[['InDrive (likely a month)',rideM]]);
     $('#sp-fixed').innerHTML=fx.map(function(x){return '<div><dt>'+esc(x[0])+'</dt><dd>'+esc(fmt(r100(x[1])))+'</dd></div>';}).join('')+
       '<div class="tot"><dt>Fixed costs a month</dt><dd>'+esc(fmt(r100(fixed)))+'</dd></div>';
     // where the difference is, biggest first, with what drives it
@@ -952,6 +955,7 @@ var Forecast=(function(){
     var why={
       food:'Biggest each month: '+top('fi')+'.',
       shop:(top('si')?'Biggest each month: '+top('si')+'. ':'')+(now.shop-bud.shop>=100?'Set your shopping limit in the outlook to '+fmt(Math.ceil(bud.shop/1000)*1000)+' to plan for it.':'Your shopping limit already fits.'),
+      ride:'About '+(R.hist.reduce(function(a,x){return a+x.rides;},0)*MDAYS/days).toFixed(0)+' rides a month, likely '+fmt(r100(rideM))+' a month; your cheaper months came to '+fmt(r100(modest.ride||0))+'. Fewer one-off trips, and Touheed for office days, brings it down.',
       surprise:lumps.length?lumps.length+' one-off buys of Rs 10,000+ in your last '+R.hist.length+' months, the biggest '+fmt(Math.max.apply(null,lumps))+'. Wait a month before any big buy, or plan it as a planned expense.':'Keep big one-off buys planned rather than sudden.'};
     $('#sp-cuts').innerHTML=CATS.map(function(k){return {k:k,cut:Math.max(0,now[k]-bud[k])};}).sort(function(a,b){return b.cut-a.cut;}).map(function(c){
       var k=c.k,under=bud[k]<modest[k]-50;
