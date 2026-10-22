@@ -887,3 +887,12 @@ body.gated .ctx,body.gated .tabs{display:none}
 .sp-verdict{font-size:13px;line-height:1.55;margin:8px 0 0;color:var(--ink)}
 .sp-verdict.short b:nth-of-type(2){color:var(--warning)}
 @media (max-width:560px){.sp-goal{grid-template-columns:1fr 1fr}}
+
+.sp-flag{border-left:3px solid var(--good);background:var(--raise);border-radius:var(--r);padding:9px 12px;margin-top:4px}
+.sp-flag.warning{border-color:var(--warning)}.sp-flag.critical{border-color:var(--critical)}
+.sp-flag b{font:600 13px var(--font-ui);color:var(--ink)}.sp-flag.critical b{color:var(--critical)}.sp-flag.warning b{color:var(--warning)}
+.sp-flag p{margin:4px 0 0;font-size:12.5px;color:var(--ink-2);line-height:1.5}
+.sp-deep{font-style:normal;font-family:var(--font-ui);font-size:10.5px;color:var(--warning);margin-left:6px}
+.sp-notes{list-style:none;margin:6px 0 10px;padding:0;display:grid;gap:6px;font-size:12.5px;color:var(--ink-2);line-height:1.5}
+.sp-notes b{color:var(--ink);font-weight:600}
+.sp-tbl tr.sp-under td:last-child{color:var(--warning)}.sp-tbl tr.sp-over td:last-child{color:var(--good)}

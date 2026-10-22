@@ -327,6 +327,7 @@ var Forecast=(function(){
         else if(o.dataset.out==='lumplim') s.lumpLimit=ov;
         else if(o.dataset.out==='groom') s.groomAlt=t.checked;
         else if(o.dataset.out==='goal') s.goal=ov;
+        else if(o.dataset.out==='target') s.target=ov;
         else if(o.dataset.out==='goalm') s.goalYm=t.value;
         else s.lumps=t.checked;
         save();update();return;
@@ -852,7 +853,11 @@ var Forecast=(function(){
     return '<section class="pnl sp" id="fp-plan"><header class="pnl-h"><span class="pnl-t"><i class="pnl-dot"></i>Savings plan</span><span class="pnl-m">what you save, what you could, and your goal</span></header><div class="pnl-b">'+
       '<div class="ol-stats" id="sp-stats"></div>'+
       '<p class="ol-month" id="sp-lead"></p>'+
+      '<div class="ol-sub"><div class="ol-subh"><span class="lbl">Your target</span><small class="ol-hint">blank uses the recommended amount</small></div>'+
+        '<div class="sp-goal"><div class="fld" data-out="target"><span class="lbl">Save each month, on base salary</span>'+money(s.target,'','')+'</div></div>'+
+        '<div id="sp-flag"></div></div>'+
       '<div class="ol-sub"><div class="ol-subh"><span class="lbl">Where to cut, a month</span><small class="ol-hint">fixed costs (Mama, Touheed, bills, laundry, toiletries) left as they are</small></div><ul class="sp-cuts" id="sp-cuts"></ul></div>'+
+      '<div class="ol-sub"><div class="ol-subh"><span class="lbl">Month by month, against your target</span></div><div id="sp-months"></div></div>'+
       '<div class="ol-sub"><div class="ol-subh"><span class="lbl">Your goal</span></div>'+
         '<div class="sp-goal"><div class="fld" data-out="goal"><span class="lbl">Pay myself to reach</span>'+money(s.goal,'','e.g. 500,000')+'</div>'+
         '<div class="fld" data-out="goalm"><span class="lbl">By</span><select class="inline ol-m" aria-label="By">'+(s.goalYm?'':'<option value="" selected>Pick a month</option>')+opts+'</select></div></div>'+
@@ -864,26 +869,44 @@ var Forecast=(function(){
     var O=S.O,P=S.P,rows=S.rows,H=rows.length,s=load(),asc=function(a,b){return a-b;};
     // an average month in the outlook: saved out of everything coming in
     var cashIn=rows.reduce(function(a,r){return a+r.salary+r.inflow;},0),saved=rows.reduce(function(a,r){return a+r.saveP50;},0);
-    var rate=cashIn>0?saved/cashIn:0;
     // modest: food, shopping and InDrive at the average of your cheaper half of past months, no surprise buys
     var days=R.hist.reduce(function(a,x){return a+x.len;},0)||1;
     // months with far fewer days logged than usual look under-logged, not modest, so they are left out here
     var cover=R.hist.map(function(x){return Object.keys(x.logged).length/x.len;}),mc=cover.slice().sort(asc)[Math.floor(cover.length/2)];
     var full=R.hist.filter(function(x,i){return cover[i]>=mc*0.6;}),thin=R.hist.length-full.length;
     var cheap=function(f){var a=full.map(function(x){return f(x)/x.len*MDAYS;}).sort(asc),h=Math.max(1,Math.floor(a.length/2));return mean(a.slice(0,h));};
+    var CATS=['food','shop','ride','surprise'],LBL={food:'Food',shop:'Shopping',ride:'InDrive',surprise:'Surprise buys'};
     var now={food:P.parts.food*S.lv,shop:shopMean(S.limit),ride:P.parts.ride*S.lv,surprise:S.expSurprise};
     var modest={food:Math.min(now.food,cheap(function(x){return x.food;})),shop:Math.min(now.shop,cheap(function(x){return x.shop;})),ride:Math.min(now.ride,cheap(function(x){return x.ride;})),surprise:0};
-    var essM=P.parts.ess*S.lv-(O.groomAlt?S.gMonth/2:0),fixed=P.mama+P.touheed+P.bills+essM;
-    var usual=O.base-fixed-now.food-now.shop-now.ride-now.surprise,best=O.base-fixed-modest.food-modest.shop-modest.ride;
-    var rec=Math.floor(best/500)*500;
+    var sum=function(o){return CATS.reduce(function(a,k){return a+o[k];},0);};
+    var essM=P.parts.ess*S.lv-(O.groomAlt?S.gMonth/2:0),fixed=P.mama+P.touheed+P.bills+essM,free=O.base-fixed;
+    var usual=free-sum(now),best=free-sum(modest),rec=Math.floor(best/500)*500;
+    var T=s.target>0?s.target:rec;
+    /* a month's budget for the target: cut where your usual month runs above your cheaper months first, in proportion
+       to how much room each has; past that, everything is cut below your cheaper months in proportion to them */
+    var room=free-T,bud={},level;
+    if(room<0){CATS.forEach(function(k){bud[k]=0;});level='fixed';}
+    else if(room>=sum(now)){CATS.forEach(function(k){bud[k]=now[k];});level='easy';}
+    else{
+      var cut=sum(now)-room,slack=sum(now)-sum(modest);
+      if(cut<=slack){CATS.forEach(function(k){bud[k]=now[k]-(slack?(now[k]-modest[k])*cut/slack:0);});level='modest';}
+      else{var more=cut-slack,ms=sum(modest)||1;CATS.forEach(function(k){bud[k]=Math.max(0,modest[k]-modest[k]*more/ms);});level='deep';}
+    }
     var pc=function(v,of){return of>0?Math.round(v/of*100)+'%':'–';};
     var tile=function(k,v,sub,cls){return '<div><span>'+esc(k)+'</span><b class="'+(cls||'')+'">'+v+'</b><small>'+sub+'</small></div>';};
     $('#sp-stats').innerHTML=
       tile('You save, an average month',esc(pc(saved/H,cashIn/H)),'about '+esc(fmt(r100(saved/H)))+' of '+esc(fmt(r100(cashIn/H)))+' coming in, over the next '+H+' months',saved<0?'neg':'')+
-      tile('Recommended, going modest',esc(fmt(rec)),pc(rec,O.base)+' of your '+esc(fmt(O.base))+' base salary')+
-      tile('That is more a month',esc(fmtS(r100(best-usual))),'than your usual month ('+esc(fmt(r100(usual)))+')');
+      tile('Recommended, going modest',esc(fmt(rec)),pc(rec,O.base)+' of your '+esc(fmt(O.base))+' base salary, '+esc(fmtS(r100(best-usual)))+' on your usual month')+
+      tile('Your target',esc(fmt(T)),(s.target>0?'set by you':'the recommended amount')+' · '+pc(T,O.base)+' of base',level==='fixed'?'neg':'');
+    var tin=$('[data-out="target"] input',box);if(tin) tin.placeholder=fmt(rec).replace(/^Rs\s*/,'');
     $('#sp-lead').innerHTML='Going modest means food, shopping and InDrive at what your cheaper half of past months cost, and no surprise buys. You have done it before, so it is realistic'+(thin?' ('+thin+' month'+(thin===1?'':'s')+' with few days logged left out)':'')+': base '+esc(fmt(O.base))+
       ' − Mama, Touheed, bills and essentials '+esc(fmt(r100(fixed)))+' − food '+esc(fmt(r100(modest.food)))+' − shopping '+esc(fmt(r100(modest.shop)))+' − InDrive '+esc(fmt(r100(modest.ride)))+' = <b>'+esc(fmt(r100(best)))+'</b>.';
+    // how the target sits against your costs
+    var fl={fixed:['critical','Runs into your fixed costs','After Mama, Touheed, bills and essentials ('+fmt(r100(fixed))+'), your base leaves '+fmt(r100(free))+'. Saving '+fmt(T)+' is '+fmt(r100(-room))+' more than that, with nothing left for food. The most you could save, eating nothing, is '+fmt(r100(free))+'; going modest it is '+fmt(rec)+'.'],
+      deep:['warning','Deeper than your cheaper months','Saving '+fmt(T)+' leaves '+fmt(r100(room))+' a month for food, shopping and InDrive, '+fmt(r100(T-best))+' below your cheaper months. Food would be '+fmt(r100(bud.food))+' a month ('+fmt(r100(bud.food/MDAYS))+' a day), against '+fmt(r100(modest.food/MDAYS))+' a day in your cheaper months.'],
+      modest:['good','Doable','Saving '+fmt(T)+' needs '+fmt(r100(T-usual))+' a month less than your usual, within what your cheaper months show. Food '+fmt(r100(bud.food))+' a month ('+fmt(r100(bud.food/MDAYS))+' a day).'],
+      easy:['good','Your usual month already does this','Your usual month saves about '+fmt(r100(usual))+', '+fmt(r100(usual-T))+' more than your target, without cutting anything.']}[level];
+    $('#sp-flag').innerHTML='<div class="sp-flag '+fl[0]+'"><b>'+esc(fl[1])+'</b><p>'+esc(fl[2])+'</p></div>';
     // where the difference is, biggest first, with what drives it
     var top=function(key){
       var m={};R.hist.forEach(function(x){Object.keys(x[key]).forEach(function(k){var e=x[key][k],t=m[k]||(m[k]={name:e.name,amt:0,n:0});t.amt+=e.amt;t.n+=e.n;});});
@@ -892,31 +915,54 @@ var Forecast=(function(){
     };
     var lumps=[];R.hist.forEach(function(x){lumps=lumps.concat(x.lumps);});
     var rideN=R.hist.reduce(function(a,x){return a+x.rides;},0)*MDAYS/days;
-    var cuts=[
-      {k:'Food',now:now.food,to:modest.food,why:'Biggest each month: '+top('fi')+'.'},
-      {k:'Shopping',now:now.shop,to:modest.shop,why:(top('si')?'Biggest each month: '+top('si')+'. ':'')+(now.shop-modest.shop>=100?'Lower your shopping limit in the outlook to '+fmt(Math.ceil(modest.shop/1000)*1000)+' to plan for it.':'Your shopping limit already matches your cheaper months.')},
-      {k:'InDrive',now:now.ride,to:modest.ride,why:'About '+rideN.toFixed(0)+' rides a month. Fewer one-off trips, and Touheed for office days, brings it to your cheaper months.'},
-      {k:'Surprise buys',now:now.surprise,to:0,why:lumps.length?lumps.length+' one-off buys of Rs 10,000+ in your last '+R.hist.length+' months, the biggest '+fmt(Math.max.apply(null,lumps))+'. Wait a month before any big buy, or plan it as a planned expense.':'Keep big one-off buys planned rather than sudden.'}
-    ].map(function(c){c.cut=Math.max(0,c.now-c.to);return c;}).sort(function(a,b){return b.cut-a.cut;});
-    $('#sp-cuts').innerHTML=cuts.map(function(c){
-      return '<li><div class="sp-h"><b>'+esc(c.k)+'</b><span>'+esc(fmt(r100(c.now)))+' → '+esc(fmt(r100(c.to)))+'</span><em class="'+(c.cut>=100?'':'sp-0')+'">'+(c.cut>=100?'save '+esc(fmt(r100(c.cut))):'already modest')+'</em></div><p>'+c.why+'</p></li>';
+    var why={
+      food:'Biggest each month: '+top('fi')+'.',
+      shop:(top('si')?'Biggest each month: '+top('si')+'. ':'')+(now.shop-bud.shop>=100?'Set your shopping limit in the outlook to '+fmt(Math.ceil(bud.shop/1000)*1000)+' to plan for it.':'Your shopping limit already fits.'),
+      ride:'About '+rideN.toFixed(0)+' rides a month. Fewer one-off trips, and Touheed for office days, brings it down.',
+      surprise:lumps.length?lumps.length+' one-off buys of Rs 10,000+ in your last '+R.hist.length+' months, the biggest '+fmt(Math.max.apply(null,lumps))+'. Wait a month before any big buy, or plan it as a planned expense.':'Keep big one-off buys planned rather than sudden.'};
+    $('#sp-cuts').innerHTML=CATS.map(function(k){return {k:k,cut:Math.max(0,now[k]-bud[k])};}).sort(function(a,b){return b.cut-a.cut;}).map(function(c){
+      var k=c.k,under=bud[k]<modest[k]-50;
+      return '<li><div class="sp-h"><b>'+LBL[k]+'</b><span>'+esc(fmt(r100(now[k])))+' → '+esc(fmt(r100(bud[k])))+(under?' <i class="sp-deep">below your cheaper months</i>':'')+'</span><em class="'+(c.cut>=100?'':'sp-0')+'">'+(c.cut>=100?'save '+esc(fmt(r100(c.cut))):'no cut needed')+'</em></div><p>'+why[k]+'</p></li>';
     }).join('');
-    // the goal: where Pay myself gets by that month, going modest and at your usual pace
+    // each coming month on these budgets: base months save the target; pay, advances, planned expenses and money in move it
+    var spend=sum(bud),Mo=months(12).slice(0,H);
+    var mon=Mo.map(function(m,i){
+      var r=rows[i],plan=S.plan[m.ym]||0,inn=S.inflow[m.ym]||0;
+      var can=r.salary+inn-plan-r.mama-r.touheed-P.bills-essM-spend;
+      var why2=[];
+      if(r.salary!==O.base) why2.push('pay '+fmt(r.salary)+' ('+(r.salary>O.base?'+':'−')+fmt(Math.abs(r.salary-O.base))+' on base)');
+      if(r.mama+r.touheed<P.mama+P.touheed) why2.push('advance already paid '+fmtS(P.mama+P.touheed-r.mama-r.touheed));
+      if(inn) why2.push('money in +'+fmt(inn));
+      if(plan) why2.push('planned −'+fmt(plan));
+      return {m:m,can:can,d:can-T,why:why2,plan:plan,inn:inn};
+    });
+    var row=function(x){var d=r100(x.d);return '<tr class="'+(d<0?'sp-under':d>0?'sp-over':'')+'"><td>'+esc(x.m.name+' '+x.m.year)+'</td><td>'+esc(x.why.join(' · ')||'base month')+'</td><td class="n">'+esc(fmtS(r100(x.can)))+'</td><td class="n">'+(Math.abs(d)<100?'on target':(d>0?'+':'')+esc(fmtS(d)))+'</td></tr>';};
+    var nx=mon[0],short=mon.filter(function(x){return x.d<=-100&&x.plan;}),boost=mon.filter(function(x){return x.inn;});
+    var notes=[];
+    if(level!=='fixed'){
+      notes.push('<b>Next month ('+esc(nx.m.name)+')</b>: '+(Math.abs(nx.d)<100?'you can save about your target, '+esc(fmt(r100(nx.can)))+'.':'you can save about <b>'+esc(fmt(r100(nx.can)))+'</b>, '+esc(fmt(r100(Math.abs(nx.d))))+(nx.d>0?' more':' less')+' than your target'+(nx.why.length?', from '+esc(nx.why.join(', ')):'')+'.'));
+      notes.push(short.length?'<b>Below target because of planned expenses</b>: '+short.map(function(x){return esc(x.m.name)+' (can save '+esc(fmt(r100(Math.max(0,x.can))))+(x.can<0?', '+esc(fmt(r100(-x.can)))+' from Pay myself':'')+')';}).join(', ')+'.':'<b>No month falls below target</b> because of planned expenses.');
+      if(boost.length) notes.push('<b>Money in</b>: '+boost.map(function(x){return esc(x.m.name)+' saves '+esc(fmt(x.inn))+' more'+(x.plan?' before its planned expense':'');}).join(', ')+'.');
+    }
+    $('#sp-months').innerHTML='<ul class="sp-notes">'+notes.map(function(n){return '<li>'+n+'</li>';}).join('')+'</ul>'+
+      '<div class="tbl-w"><table class="tbl sp-tbl"><thead><tr><th>Cycle</th><th>What changes</th><th class="n">Can save</th><th class="n">vs target</th></tr></thead><tbody>'+mon.map(row).join('')+'</tbody></table></div>';
+    // the goal: where Pay myself gets by that month on your target's budgets, and at your usual pace
     var out=$('#sp-goal-r'),M=months(12),j=M.map(function(m){return m.ym;}).indexOf(s.goalYm);
-    if(!(s.goal>0)||j<0){out.innerHTML='<p class="fc-note">Enter how much you want in Pay myself and by when, and this shows how close going modest gets you.</p>';return;}
+    if(!(s.goal>0)||j<0){out.innerHTML='<p class="fc-note">Enter how much you want in Pay myself and by when, and this shows how close your target gets you.</p>';return;}
     var mo=r100(S.start.bal),us=mo;
     for(var i=0;i<=j;i++){
       var sal=(i===0&&O.next!=null?O.next:O.base)+(S.inflow[M[i].ym]||0)-(S.plan[M[i].ym]||0);
       var pay=i===0?rows[0].mama+rows[0].touheed:P.mama+P.touheed,b=sal-pay-P.bills-essM;
-      mo+=b-modest.food-modest.shop-modest.ride;us+=b-now.food-now.shop-now.ride-now.surprise;
+      mo+=b-spend;us+=b-sum(now);
     }
-    var n=j+1,need=(s.goal-S.start.bal)/n,gap=mo-s.goal,sc=Math.max(s.goal,mo,us)*1.04,pct=Math.max(0,mo/sc*100),pu=Math.max(0,us/sc*100),pg=s.goal/sc*100;
+    var n=j+1,need=(s.goal-S.start.bal)/n,gap=mo-s.goal;
+    var sc=Math.max(s.goal,mo,us)*1.04,pct=Math.max(0,mo/sc*100),pu=Math.max(0,us/sc*100),pg=s.goal/sc*100;
     var when=M[j].name+' '+M[j].year;
-    out.innerHTML='<div class="sp-bar" role="img" aria-label="Going modest reaches '+Math.round(mo/s.goal*100)+'% of your goal"><i class="sp-mo" style="width:'+pct.toFixed(1)+'%"></i><i class="sp-us" style="width:'+pu.toFixed(1)+'%"></i><b class="sp-gl" style="left:'+pg.toFixed(1)+'%"></b></div>'+
-      '<div class="legend sm"><span><i class="sw c3"></i>Going modest '+esc(fmt(r100(mo)))+'</span><span><i class="sw cn"></i>Usual pace '+esc(fmt(r100(us)))+'</span><span><i class="sw sp-glsw"></i>Goal '+esc(fmt(s.goal))+'</span></div>'+
+    out.innerHTML='<div class="sp-bar" role="img" aria-label="Your target reaches '+Math.round(mo/s.goal*100)+'% of your goal"><i class="sp-mo" style="width:'+pct.toFixed(1)+'%"></i><i class="sp-us" style="width:'+pu.toFixed(1)+'%"></i><b class="sp-gl" style="left:'+pg.toFixed(1)+'%"></b></div>'+
+      '<div class="legend sm"><span><i class="sw c3"></i>On your target '+esc(fmt(r100(mo)))+'</span><span><i class="sw cn"></i>Usual pace '+esc(fmt(r100(us)))+'</span><span><i class="sw sp-glsw"></i>Goal '+esc(fmt(s.goal))+'</span></div>'+
       '<p class="sp-verdict '+(gap>=0?'good':'short')+'">'+(gap>=0
-        ?'Going modest, Pay myself reaches about <b>'+esc(fmt(r100(mo)))+'</b> by '+esc(when)+': your goal, with <b>'+esc(fmt(r100(gap)))+'</b> to spare.'+(us>=s.goal?' Even your usual pace gets there.':' At your usual pace you would reach '+esc(fmt(r100(us)))+', '+esc(fmt(r100(s.goal-us)))+' short.')
-        :'Going modest, Pay myself reaches about <b>'+esc(fmt(r100(mo)))+'</b> by '+esc(when)+', <b>'+Math.round(mo/s.goal*100)+'%</b> of your goal and '+esc(fmt(r100(-gap)))+' short. Hitting it needs about '+esc(fmt(r100(need)))+' saved a month for '+n+' month'+(n===1?'':'s')+'; going modest saves about '+esc(fmt(r100((mo-S.start.bal)/n)))+'. A later month, a planned money-in, or cutting deeper would close the gap.')+
+        ?'On your target, Pay myself reaches about <b>'+esc(fmt(r100(mo)))+'</b> by '+esc(when)+': your goal, with <b>'+esc(fmt(r100(gap)))+'</b> to spare.'+(us>=s.goal?' Even your usual pace gets there.':' At your usual pace you would reach '+esc(fmt(r100(us)))+', '+esc(fmt(r100(s.goal-us)))+' short.')
+        :'On your target, Pay myself reaches about <b>'+esc(fmt(r100(mo)))+'</b> by '+esc(when)+', <b>'+Math.round(mo/s.goal*100)+'%</b> of your goal and '+esc(fmt(r100(-gap)))+' short. Hitting it needs about '+esc(fmt(r100(need)))+' saved a month for '+n+' month'+(n===1?'':'s')+'. Raise your target, pick a later month, or add planned money in.')+
       '</p>';
   }
 

@@ -130,8 +130,10 @@ python3 -m http.server 8000
   - **Savings plan** (after the outlook):
     - **You save, an average month:** the share of everything coming in (salary plus planned money in) that the outlook expects you to keep, averaged over its months.
     - **Recommended, going modest:** what you would save from your base salary with food, shopping and InDrive at the average of your cheaper half of past months, and no surprise buys. Mama, Touheed, bills, laundry and toiletries stay as they are. Months with far fewer days logged than usual are left out, since they look under-logged rather than modest.
-    - **Where to cut:** surprise buys, food, InDrive and shopping, biggest saving first, each with your usual and modest monthly figures and what drives it (your biggest food and shopping items a month, rides a month, past one-off buys).
-    - **Your goal:** a Pay myself amount and a month. It shows where Pay myself gets by then going modest and at your usual pace, against the goal, and when going modest falls short, how much you would need to save a month.
+    - **Your target:** what you want to save each month on your base salary (blank uses the recommended amount). Everything below follows it. A flag says whether it is already met by your usual month, doable within your cheaper months, deeper than your cheaper months (with the food per day it leaves), or runs into your fixed costs (more than your base leaves after Mama, Touheed, bills and essentials).
+    - **Where to cut:** surprise buys, food, InDrive and shopping, biggest cut first: your usual monthly figure and the budget your target leaves for it, with what drives it (your biggest food and shopping items a month, rides a month, past one-off buys). Cuts come first from where your usual month runs above your cheaper months; a target past that cuts everything below your cheaper months, marked as such.
+    - **Month by month:** on those budgets, what each coming month can save against the target: next month's pay against base, an advance already paid, planned money in (saved on top), and planned expenses (the months they push below target, and anything that would come out of Pay myself).
+    - **Your goal:** a Pay myself amount and a month. It shows where Pay myself gets by then on your target and at your usual pace, against the goal, and when going modest falls short, how much you would need to save a month.
 
   What you enter is kept in your browser.
 - **Ctrl/Cmd + K** opens a command palette to jump to views, actions, items and transactions.
