@@ -910,7 +910,8 @@ var Forecast=(function(){
       // InDrive, when cut, works like food: down to your cheaper months first, below that last
       var cap1={food:now.food-modest.food,shop:now.shop,surprise:now.surprise,ride:cutRide?now.ride-modest.ride:0},c1=share(cut,cap1),got=sum(c1);
       CATS.forEach(function(k){bud[k]=now[k]-c1[k];});
-      if(cut-got>0.5){var c2=share(cut-got,{food:bud.food,ride:cutRide?bud.ride:0});bud.food=Math.max(0,bud.food-c2.food);if(cutRide) bud.ride=Math.max(0,bud.ride-c2.ride);}
+      // past that, food (and InDrive, when cut) shrink in proportion to what is left of them
+      if(cut-got>0.5){var lf=cut-got,base2=bud.food+(cutRide?bud.ride:0)||1,f2=Math.max(0,1-lf/base2);bud.food*=f2;if(cutRide) bud.ride*=f2;}
       level=cut<=slack?'modest':'deep';
     }
     // months with planned money in or a planned expense tighten to modest spending (if the target is not already tighter)
@@ -935,7 +936,7 @@ var Forecast=(function(){
     // how the target sits against your costs
     var fl={fixed:['critical','Runs into your fixed costs','After your fixed costs ('+fmt(r100(fixed))+', listed below), your base leaves '+fmt(r100(free))+'. Saving '+fmt(T)+' is '+fmt(r100(-room))+' more than that, with nothing left for food. The most you could save, eating nothing, is '+fmt(r100(free))+'; going modest it is '+fmt(rec)+'.'],
       deep:['warning','Deeper than your cheaper months','Saving '+fmt(T)+' leaves '+fmt(r100(room))+' a month for food, shopping'+(Q.cutRide?', InDrive':'')+' and surprise buys, '+fmt(r100(T-best))+' below your cheaper months. Food would be '+fmt(r100(bud.food))+' a month ('+fmt(r100(bud.food/MDAYS))+' a day), against '+fmt(r100(modest.food/MDAYS))+' a day in your cheaper months.'],
-      modest:['good','Doable','Saving '+fmt(T)+' needs '+fmt(r100(T-usual))+' a month less than your usual, no more than going modest saves. Shopping '+fmt(r100(bud.shop))+', surprise buys '+fmt(r100(bud.surprise))+', food '+fmt(r100(bud.food))+' a month ('+fmt(r100(bud.food/MDAYS))+' a day).'],
+      modest:['good','Doable','Saving '+fmt(T)+' needs '+fmt(r100(T-usual))+' a month less than your usual, no more than going modest saves. Shopping '+fmt(r100(bud.shop))+', surprise buys '+fmt(r100(bud.surprise))+(Q.cutRide?', InDrive '+fmt(r100(bud.ride)):'')+', food '+fmt(r100(bud.food))+' a month ('+fmt(r100(bud.food/MDAYS))+' a day).'],
       easy:['good','Your usual month already does this','Your usual month saves about '+fmt(r100(usual))+', '+fmt(r100(usual-T))+' more than your target, without cutting anything.']}[level];
     $('#sp-flag').innerHTML='<div class="sp-flag '+fl[0]+'"><b>'+esc(fl[1])+'</b><p>'+esc(fl[2])+'</p></div>';
     // every fixed cost a month, one by one
