@@ -183,7 +183,13 @@ var Forecast=(function(){
     var need=cap==null?null:I.mode==='food'?cap:Math.max(0,cap-ft);
     var left=need==null?null:base-need;
     var dayLimit=I.mode==='food'?(left==null?null:(left+ft)/R.days):(cap==null?null:cap/R.days);
-    return {need:need,dayLimit:dayLimit,foodToday:ft,money:money,advIn:advIn,adv:adv,bills:bills,ess:ess,ride:ride,base:base,cap:cap,left:left,kept:R.saved};
+    /* when the budget overflows, the shortfall comes out of Pay myself: what Pay myself should be lowered to.
+       Food still has to be paid for, so in food mode the shortfall also covers your usual food for the days left
+       (less what today already has); shopping can wait, so in shopping mode only the overflow counts. */
+    var foodNeed=I.mode==='food'?Math.max(0,R.usual.food*R.days-ft):0;
+    var short=left==null?0:Math.max(0,foodNeed-left,-left);
+    var rec=short>0?Math.floor((R.saved-short)/100)*100:R.saved;
+    return {need:need,dayLimit:dayLimit,foodToday:ft,money:money,advIn:advIn,adv:adv,bills:bills,ess:ess,ride:ride,base:base,cap:cap,left:left,kept:R.saved,rec:rec,short:short,foodNeed:foodNeed};
   }
 
   // ---------------------------------------------------------------- view
@@ -414,9 +420,9 @@ var Forecast=(function(){
       k=C.left<=0?'Short by':'You can spend on '+what+' until '+fmtDay(R.lastDay);
       big=Math.abs(C.left);per=C.left>0?fmt(pd)+' a day':'nothing left for '+what;
       lead=C.left<=0
-        ?'Your bills, essentials, InDrive and '+capWhat+' cap already come to '+fmt(-C.left)+' more than you have. That, and any '+what+', would come out of Pay myself. Lower a cap or an estimate to make room.'
+        ?'Your bills, essentials, InDrive and '+capWhat+' cap already come to '+fmt(-C.left)+' more than you have. That, and any '+what+', would come out of Pay myself, so lower Pay myself from '+fmt(C.kept)+' to '+fmt(C.rec)+' (recommended), or lower a cap or an estimate to make room.'
         :lv==='good'?'Keep '+what+' under '+fmt(C.left)+' ('+fmt(pd)+' a day) and stick to your '+capWhat+' cap, and Pay myself stays untouched. You usually spend about '+fmt(usual)+' a day on '+what+'.'
-        :'That is '+fmt(pd)+' a day for '+what+', less than the '+fmt(usual)+' a day you usually spend. Stay under it, or lower your '+capWhat+' cap, to keep Pay myself untouched.';
+        :'That is '+fmt(pd)+' a day for '+what+', less than the '+fmt(usual)+' a day you usually spend. Stay under it, or lower your '+capWhat+' cap, to keep Pay myself untouched'+(C.rec!==C.kept?'. If you eat as usual, lower Pay myself to '+fmt(C.rec)+' (recommended).':'.');
     }
     $('#fp-hero').className='pnl m-hero fp-hero m-'+lv;
     $('#fp-icon').textContent={good:'✓',warning:'!',critical:'✕',none:'?'}[lv];
@@ -433,7 +439,8 @@ var Forecast=(function(){
       (food||C.cap==null?row('Your '+capWhat+' cap',C.cap==null?'<span class="fp-miss">not set</span>':neg(C.cap))
         :row('Food: '+fmt(C.dayLimit)+' a day \u00d7 '+d+' days'+(C.foodToday?', less '+fmt(C.foodToday)+' already spent today':''),neg(C.need)))+
       row('Left for '+what,C.left==null?'–':esc(fmtS(C.left)),'tot'+(C.left!=null&&C.left<0?' neg':''))+
-      row('Pay myself (as in the sheet)'+(C.adv?'; the '+fmt(C.adv)+' advance comes back next payday':''),esc(fmt(C.kept)));
+      row('Pay myself (as in the sheet)'+(C.adv?'; the '+fmt(C.adv)+' advance comes back next payday':''),esc(fmt(C.kept)))+
+      (C.rec!==C.kept?row('Recommended Pay myself, to cover a '+fmt(C.short)+' shortfall'+(C.foodNeed>0?' (with your usual '+fmt(C.foodNeed)+' of food to payday)':''),esc(fmt(C.rec)),'tot fp-rec'):'');
     $('#fp-bills-t').textContent=fmt(C.bills);
     $('#fp-ess-t').textContent=fmt(C.ess);
     // the predicted side
@@ -721,8 +728,9 @@ var Forecast=(function(){
   }
   // the projection starts from this cycle's Pay myself (less any advance paid from it);
   // the next payday's salary is then added and that month's expenses taken off
+  // the outlook builds on this month's likely Pay myself: the recommended one when the budget overflows
   function startBalance(I,C){
-    return {bal:C.kept,dip:0};
+    return {bal:C.rec,dip:C.rec-C.kept};
   }
   /* Shopping each month: you try to stay under your limit, so most months land
      somewhere between 40% and all of it (more often near the top), and about one
@@ -880,7 +888,7 @@ var Forecast=(function(){
       if(i<s0||(i===s0&&isCur)){
         var p=past[i],prev=i>0?past[i-1]:null;cy=Y(p.saved);
         h='<div class="tt-h">'+esc(p.full)+' · recorded</div><div class="tt-b">Pay myself '+esc(fmt(p.saved))+(prev?'<br>'+(p.saved===prev.saved?'no change since '+esc(prev.full):(p.saved>prev.saved?'+':'\u2212')+esc(fmt(Math.abs(p.saved-prev.saved)))+' since '+esc(prev.full)):'')+
-          (i===s0?'<br>Likely '+esc(fmt(r100(S.start.bal)))+' by '+esc(fmtDay(R.lastDay))+(S.start.dip<0?', after this month’s shortfall':''):'')+'</div>';
+          (i===s0?'<br>Likely '+esc(fmt(r100(S.start.bal)))+' by '+esc(fmtDay(R.lastDay))+(S.start.dip<0?' (recommended), after this month’s shortfall':''):'')+'</div>';
       }else if(i===s0){cy=Y(S.start.bal);h='<div class="tt-h">Now</div><div class="tt-b">Pay myself '+esc(fmt(S.start.bal))+'</div>';}
       else{var j=i-s0-1,r=rows[j],b=B[j];cy=Y(b.p50);
         // that month's expected spending, item by item (the same plan the forecast uses)
@@ -890,7 +898,7 @@ var Forecast=(function(){
         var tot=items.reduce(function(a2,x){return a2+x[1];},0);
         h='<div class="tt-h">'+esc(r.m.name+' '+r.m.year)+' cycle</div><div class="tt-b">Pay myself likely '+esc(fmt(r100(b.p50)))+' <span class="tt-r">('+esc(K(b.p10))+'\u2013'+esc(K(b.p90))+')</span>'+
           // built on the month before: this cycle's actual Pay myself for the first month, the likely one after that
-          '<br>= '+(j?esc(rows[j-1].m.name)+' likely '+esc(fmt(r100(B[j-1].p50))):esc(R.cur.name)+' actual '+esc(fmt(r100(S.start.bal))))+' + saved '+esc(fmtS(r.saveP50))+'<br>Salary '+esc(fmt(r.salary))+(r.inflow?' + money in '+esc(fmt(r.inflow)):'')+'</div>'+
+          '<br>= '+(j?esc(rows[j-1].m.name)+' likely '+esc(fmt(r100(B[j-1].p50))):esc(R.cur.name)+(S.start.dip<0?' likely (recommended) ':' actual ')+esc(fmt(r100(S.start.bal))))+' + saved '+esc(fmtS(r.saveP50))+'<br>Salary '+esc(fmt(r.salary))+(r.inflow?' + money in '+esc(fmt(r.inflow)):'')+'</div>'+
           '<dl class="tt-g">'+items.filter(function(x){return x[1]>0;}).map(function(x){return '<dt>'+esc(x[0])+'</dt><dd>'+esc(fmt(r100(x[1])))+'</dd>';}).join('')+
           (Math.abs(r.salary+r.inflow-tot-r.saveP50)>=100?'<dt>'+(r.salary+r.inflow-tot-r.saveP50>0?'Ups and downs, surprise buys':'Likely a bit under plan')+'</dt><dd>'+esc(fmtS(r100(r.salary+r.inflow-tot-r.saveP50)))+'</dd>':'')+
           '<dt class="tt-t">Expenses</dt><dd class="tt-t">'+esc(fmt(r100(r.salary+r.inflow-r.saveP50)))+'</dd><dt class="tt-t">Saved about</dt><dd class="tt-t">'+esc(fmtS(r100(r.saveP50)))+'</dd></dl>';}
@@ -909,7 +917,7 @@ var Forecast=(function(){
     $('#ol-table').innerHTML='<thead><tr><th>Cycle</th><th class="n">Salary</th><th class="n">Mama + Touheed</th><th class="n">Bills</th><th class="n">Spending</th><th class="n">Shopping</th><th class="n">Planned</th><th class="n">Money in</th><th class="n">Saved (likely)</th><th class="n">Pay myself</th></tr></thead><tbody>'+
       R.past.filter(function(p){return p.day!==R.cur.start;}).map(function(p){return '<tr class="ol-rec"><td>'+esc(p.full)+' <small>recorded</small></td><td class="n" colspan="8"></td><td class="n">'+esc(fmt(p.saved))+'</td></tr>';}).join('')+
       // this cycle: the actual Pay myself the first projected month builds on
-      '<tr class="ol-rec ol-now-row"><td>'+esc(R.cur.name)+' <small>now, actual'+(S.start.bal!==R.saved?', less advances':'')+'</small></td><td class="n" colspan="8"></td><td class="n">'+esc(fmt(S.start.bal))+'</td></tr>'+
+      '<tr class="ol-rec ol-now-row"><td>'+esc(R.cur.name)+' <small>'+(S.start.dip<0?'now, recommended (actual '+esc(fmt(R.saved))+', less the shortfall)':'now, actual')+'</small></td><td class="n" colspan="8"></td><td class="n">'+esc(fmt(S.start.bal))+'</td></tr>'+
       rows.map(function(r,i){return '<tr><td>'+esc(r.m.name+' '+r.m.year)+'</td><td class="n">'+esc(fmt(r.salary))+'</td><td class="n">'+esc(fmt(r.mama+r.touheed))+'</td><td class="n">'+esc(fmt(r.bills))+'</td><td class="n">'+esc(fmt(r100(r.spend)))+'</td><td class="n'+(r.shop>S.limit?' ol-over':'')+'">'+esc(fmt(r.shop))+'</td><td class="n">'+(r.planned?esc(fmt(r.planned)):'–')+'</td><td class="n">'+(r.inflow?'+'+esc(fmt(r.inflow)):'–')+'</td><td class="n">'+esc(fmtS(r100(r.saveP50)))+'</td><td class="n">'+esc(fmt(r100(B[i].p50)))+'</td></tr>';}).join('')+'</tbody>';
   }
 
