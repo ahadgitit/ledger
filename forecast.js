@@ -20,8 +20,8 @@ var Forecast=(function(){
   var PEOPLE=[{key:'touheed',label:'Touheed',what:'transport fee',fee:27000},{key:'mama',label:'Mama',what:'groceries',fee:35000}];
   var RIDE_HALF=60,RIDE_DISP=0.5,RIDE_SIMS=4000;
   var ESS=[
-    {k:'laundry',t:'Laundry',re:/laund|laubdry|dry ?clean/},
-    {k:'groom',t:'Grooming and toiletries',re:/razor|blade|gill?ett?e|gellete|shav|groom|deod|shampoo|haircut|body ?wash|tooth|oral ?max/}
+    {k:'laundry',t:'Laundry',cat:'laundry',re:/laund|laubdry|dry ?clean/},
+    {k:'groom',t:'Grooming and toiletries',cat:'toiletries',re:/razor|blade|gill?ett?e|gellete|shav|groom|deod|shampoo|haircut|body ?wash|tooth|oral ?max/}
   ];
   var BILL_RE=/claude|internet|amazon|youtube|netflix|subscri/;
 
@@ -60,9 +60,9 @@ var Forecast=(function(){
         if(cat==='untracked'){h.untracked+=t.amt;return;}
         // not everyday spending: savings, money moved, Touheed, Mama, renovation, bills, rides
         if(/^(savings|transfer|influx|loaned|family\/home|renovation)$/.test(cat)) return;
-        if(/tou?heed|tohid|\bmama\b|advance pay|\btransport\b/.test(s)||BILL_RE.test(s)) return;
+        if(/tou?heed|tohid|\bmama\b|advance pay|\btransport\b/.test(s)||BILL_RE.test(s)||cat==='bills & subscriptions') return;
         if(/in\s*-?\s*drive/.test(s)||cat==='indrive'||cat==='transport') return;
-        var e=ESS.find(function(x){return x.re.test(s);});
+        var e=ESS.find(function(x){return x.cat===cat;})||ESS.find(function(x){return x.re.test(s);});
         if(e) h.ess[e.k]+=t.amt;
         // one-off buys of 10,000 or more (an oven, a course), for the savings outlook
         else if(t.amt>=10000) h.lumps.push(t.amt);
@@ -783,7 +783,7 @@ var Forecast=(function(){
     var g=(R.ess.filter(function(e){return e.key==='groom';})[0]||{}).amt||0,gMonth=O.ess.groom*lv,since=1;
     var grRe=ESS.filter(function(e){return e.k==='groom';})[0].re;
     // this cycle has toiletries if they are logged already or planned in its budget, so the next one skips them
-    if(g>0||R.cur.tx.some(function(t){return t.amt>0&&grRe.test((t.name+' '+t.desc).toLowerCase());})) since=0;
+    if(g>0||R.cur.tx.some(function(t){return t.amt>0&&(t.cat==='toiletries'||grRe.test((t.name+' '+t.desc).toLowerCase()));})) since=0;
     else for(var hi=R.hist.length-1;hi>=0;hi--){if(R.hist[hi].ess.groom>0){since=R.hist.length-hi;break;}}
     // one realistic shopping figure per month for the table, the same each time you look
     var rt=rng(R.id*17+7);

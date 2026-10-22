@@ -25,6 +25,7 @@ Pages at **https://ahadgitit.github.io/ledger/**.
 - **Add entry** (the **+** button on a phone) opens a form with the sheet's own fields: amount,
   what it was, description, category, payment mode and date. Picking a name you have used
   before fills in its usual category, payment mode and recent descriptions.
+  Categories include **Bills & subscriptions** (Claude, internet, Amazon, YouTube, Netflix, foodpanda), **Laundry** and **Toiletries** (shaving, deodorant, shampoo, lip balm, toothbrushes, socks, haircuts); **Utilities** is for what is left (repairs, medicine, fees, gas). Loans and advance payments go under Loaned. Typing a name picks the category from your history, or guesses it from these words.
   InDrive rides have their own **InDrive** category (shown in orange); Transport is for other travel
   such as the monthly transport fee. Typing an InDrive name picks InDrive automatically.
   - The row goes into columns A to F, right after the last entry of the latest month. It is

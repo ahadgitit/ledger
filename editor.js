@@ -16,7 +16,7 @@
   function sheetAmt(n){return n<0?'('+group(n)+')':group(n);}
 
   var CATS=[
-    {v:'Food'},{v:'InDrive'},{v:'Transport'},{v:'Utilities'},{v:'Family/Home'},{v:'Shopping'},{v:'Fun'},
+    {v:'Food'},{v:'InDrive'},{v:'Transport'},{v:'Bills & subscriptions'},{v:'Laundry'},{v:'Toiletries'},{v:'Utilities'},{v:'Family/Home'},{v:'Shopping'},{v:'Fun'},
     {v:'Renovation'},{v:'loaned',l:'Loaned'},{v:'untracked',l:'Untracked'},{v:'savings',l:'Savings'},
     {v:'transfer',l:'Transfer'},{v:'influx',l:'Money in'}
   ];
@@ -26,11 +26,14 @@
     [/transfer|cash ?out|exchange/,'transfer'],
     [/in ?drive/,'InDrive'],
     [/careem|uber|fare|transport|petrol|fuel|ride|rickshaw/,'Transport'],
-    [/lunch|dinner|breakfast|snack|naan|roti|bryani|biryani|chaat|pizza|burger|cake|ice ?cream|sweet|food|yog|milk|tea|coffee|shake/,'Food'],
-    [/grocer|internet|bill|subscri|claude|amazon|repair|laundry|medicine|meds|therapy|shampoo|soap|deod|groom|haircut/,'Utilities'],
+    [/loan|lent|advance/,'loaned'],
+    [/laund|dry ?clean/,'Laundry'],
+    [/internet|bill|subscri|claude|amazon|youtube|netflix|foodpanda sub/,'Bills & subscriptions'],
+    [/shampoo|soap|deod|groom|haircut|razor|blade|shav|lip ?balm|chapstick|labello|body ?wash|tooth|oral ?max|sock/,'Toiletries'],
+    [/lunch|dinner|breakfast|snack|naan|roti|bryani|biryani|chaat|pizza|burger|cake|ice ?cream|sweet|food|yog|milk|tea|coffee|shake|cereal|cerial/,'Food'],
+    [/repair|medicine|meds|therapy|gas refill|fees/,'Utilities'],
     [/shirt|shoe|perfume|outfit|cloth|trouser|watch|specs|glasses/,'Shopping'],
-    [/youtube|netflix|cinema|movie|ticket|gift|treat|outing/,'Fun'],
-    [/loan|lent/,'loaned']
+    [/cinema|movie|ticket|gift|treat|outing/,'Fun']
   ];
   function catLabel(v){for(var i=0;i<CATS.length;i++) if(CATS[i].v===v) return CATS[i].l||CATS[i].v;return v;}
   function catValue(lower){
