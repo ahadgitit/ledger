@@ -741,6 +741,7 @@ body.gated .ctx,body.gated .tabs{display:none}
 .ol-plm{fill:var(--c4)}
 .ol-hit{fill:transparent;cursor:crosshair;touch-action:pan-y}
 .sw.ol-bandsw{background:rgba(57,135,229,.35)}
+.sw.ol-insw{background:var(--c3);border-radius:50%;width:8px;height:8px}.ol-inm{fill:var(--c3);stroke:var(--panel,#1c2127);stroke-width:1.5}.ol-pl.ol-inl{stroke:var(--c3)}
 .sw.ol-plansw{background:var(--c4);transform:rotate(45deg);width:8px;height:8px}
 .ol-month{margin:10px 0 0;font-size:12.5px;line-height:1.6;color:var(--ink-2)}
 .ol-month b{color:var(--ink);font-family:var(--font-num)}
