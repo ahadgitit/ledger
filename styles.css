@@ -925,3 +925,4 @@ body.gated .ctx,body.gated .tabs{display:none}
 html.ol-fs-open,html.ol-fs-open body{overflow:hidden}
 .ol-rot{display:none}
 @media (orientation:portrait) and (max-width:600px){.ol-rot{display:inline}}
+.fp-spent{font-weight:600;color:var(--ink)}

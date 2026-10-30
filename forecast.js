@@ -137,7 +137,12 @@ var Forecast=(function(){
     (bs._extra||[]).forEach(function(x,j){bills.push({key:'x'+j,label:x.label||'',extra:true,amt:x.amt||0,on:true});});
     var ess=ESS.map(function(e){
       var d=r100(perDay(h,function(x){return x.ess[e.k];})*days);
-      return {key:e.k,label:e.t,def:d,amt:s.ess[e.k]!=null?s.ess[e.k]:d,
+      // already spent on it this cycle, by its category or, for older rows, by name
+      var spent=cur.tx.reduce(function(a,t){
+        if(!(t.amt>0)||/^(savings|transfer|influx|loaned)$/.test(t.cat)) return a;
+        return a+(t.cat===e.cat||e.re.test((t.name+' '+t.desc).toLowerCase())?t.amt:0);
+      },0);
+      return {key:e.k,label:e.t,def:d,amt:s.ess[e.k]!=null?s.ess[e.k]:d,spent:spent,
         months:h.filter(function(x){return x.ess[e.k]>0;}).length};
     });
     (s.essExtra||[]).forEach(function(x,j){ess.push({key:'x'+j,label:x.label||'',extra:true,amt:x.amt||0});});
@@ -229,7 +234,7 @@ var Forecast=(function(){
       return itemRow('bill',b,b.paid?'paid'+(b.when!=null?' '+esc(fmtDay(b.when)):'')+' · already out of Remaining':b.extra?'added by you':'due'+(b.when!=null?' '+esc(fmtDay(b.when)):''),true);
     }).join('');
     var ess=R.ess.map(function(e){
-      return itemRow('ess',e,e.extra?'added by you':'usually '+esc(fmt(e.def))+(e.months<R.hist.length?' · in '+e.months+' of '+R.hist.length+' months':''));
+      return itemRow('ess',e,e.extra?'added by you':'<b class="fp-spent">'+(e.spent?esc(fmt(e.spent))+' spent':'nothing spent')+' this cycle</b> · usually '+esc(fmt(e.def))+' for the days left'+(e.months<R.hist.length?' · in '+e.months+' of '+R.hist.length+' months':''));
     }).join('');
     var RP=R.ride,rd=RP.days,rideBig='<div class="fp-pred"><b>'+esc(fmt(r100(RP.amt)))+'</b><span>most likely on InDrive in the '+rd+' day'+(rd===1?'':'s')+' to payday'+
       (R.rideNow.today?' (from tomorrow, today’s rides are logged)':'')+'</span></div>';
@@ -287,7 +292,7 @@ var Forecast=(function(){
       ui.pnl('fp-shop','Shopping and outfits','clothes, perfume, gifts, gadgets',
         (foodMode?capBox('shop',usualShop):result('shop'))+
         '<div class="fp-hist">'+shist+'</div><p class="fc-note">About '+esc(fmt(usualShop))+' over '+d+' days, going by your past months.</p>',{cls:''})+
-      ui.pnl('fp-ess','Monthly essentials','predicted from past months · edit any',ess+
+      ui.pnl('fp-ess','Monthly essentials','still to spend until payday · edit any',ess+
         '<div class="fp-foot"><button type="button" class="btn sm" data-add="ess">+ Add expense</button><span class="fp-tot">Total <b id="fp-ess-t"></b></span></div>',{cls:''})+
       ui.pnl('fp-adv','Advance payments','paid from Pay myself, back next payday',prev+adv,{cls:''})+
       '</div></div>'+

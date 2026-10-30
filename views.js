@@ -469,11 +469,20 @@
       var share=pct(r.v,M.A.spent);
       s+='<g class="tm '+cls(r.name)+'" data-cat-filter="'+esc(r.name)+'" data-tip="'+esc(r.name+'\n'+fmt(r.v)+' · '+share+'% of spent\nClick to explore')+'">'+
         '<rect x="'+Viz.r1(x)+'" y="'+Viz.r1(y)+'" width="'+Viz.r1(w)+'" height="'+Viz.r1(h)+'" rx="2"/>';
-      if(w>64&&h>38) s+='<text class="tm-n" x="'+(x+8)+'" y="'+(y+17)+'">'+esc(r.name.toUpperCase())+'</text><text class="tm-v" x="'+(x+8)+'" y="'+(y+34)+'">'+esc(K(r.v))+' · '+share+'%</text>';
-      else if(w>34&&h>18) s+='<text class="tm-v" x="'+(x+5)+'" y="'+(y+14)+'">'+share+'%</text>';
+      if(w>64&&h>38) s+='<text class="tm-n" x="'+(x+8)+'" y="'+(y+17)+'" data-fit="'+Viz.r1(w-14)+'">'+esc(r.name.toUpperCase())+'</text><text class="tm-v" x="'+(x+8)+'" y="'+(y+34)+'" data-fit="'+Viz.r1(w-14)+'" data-short="'+share+'%">'+esc(K(r.v))+' · '+share+'%</text>';
+      else if(w>34&&h>18) s+='<text class="tm-v" x="'+(x+5)+'" y="'+(y+14)+'" data-fit="'+Viz.r1(w-8)+'">'+share+'%</text>';
       s+='</g>';
     });
     el.innerHTML=s+'</svg>';
+    // keep every label inside its box: a value line falls back to just the share, a name is cut short with an ellipsis
+    $$('text[data-fit]',el).forEach(function(t){
+      var max=+t.getAttribute('data-fit');
+      if(t.getComputedTextLength()<=max) return;
+      if(t.hasAttribute('data-short')){t.textContent=t.getAttribute('data-short');if(t.getComputedTextLength()<=max) return;}
+      var full=t.textContent;
+      for(var n=full.length-1;n>0;n--){t.textContent=full.slice(0,n).replace(/[\s/&]+$/,'')+'…';if(t.getComputedTextLength()<=max) return;}
+      t.textContent='';
+    });
   }
 
   function drawHeat(){
