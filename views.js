@@ -588,8 +588,13 @@
     });
     function vals(o){return Object.keys(o).map(function(k){return o[k];}).sort(function(a,b){return b.v-a.v;});}
     var C=[vals(acc),vals(cat),vals(it)];
+    // items sit next to the category they come from (in the categories' order, biggest first within each),
+    // so a category's bands go straight across instead of crossing other categories'; "Everything else" last
+    var main={},catAt={};
+    C[1].forEach(function(n,i){catAt[n.id]=i;});
+    vals(l2).forEach(function(l){if(!main[l.t]) main[l.t]=l.s;});
     var other=C[2].filter(function(n){return n.id==='i:~';});
-    C[2]=C[2].filter(function(n){return n.id!=='i:~';}).concat(other);
+    C[2]=C[2].filter(function(n){return n.id!=='i:~';}).sort(function(a,b){return (catAt[main[a.id]]-catAt[main[b.id]])||(b.v-a.v);}).concat(other);
     var links=vals(l1).concat(vals(l2));
     var W=Math.max(320,el.clientWidth),narrow=W<640;
     var labW=narrow?78:150,H=Math.max(360,Math.min(560,C[2].length*40));
