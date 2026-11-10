@@ -324,7 +324,9 @@ var Forecast=(function(){
     }
     root.addEventListener('input',function(e){
       var t=e.target,o=t.closest('[data-out]'),pl=t.closest('[data-plan]'),lb=t.closest('[data-lab]');
-      if(lb||t.dataset.labm){s.lab=Object.assign({},LAB0,s.lab||{});if(lb) s.lab[lb.dataset.lab]=+t.value;else s.lab[t.dataset.labm]=t.dataset.labm==='salFrom'?+t.value:t.value;save();drawLab();return;}
+      var lo=t.closest('[data-labone]');
+      if(lo){s.lab=labIn();var o=s.lab.ones[+lo.dataset.labone];if(o){if(t.classList.contains('lab-om')) o.ym=t.value;else if(t.classList.contains('lab-ol')) o.label=t.value;else o.amt=amt(t.value)||0;save();drawLab();}return;}
+      if(lb||t.dataset.labm){s.lab=labIn();if(lb) s.lab[lb.dataset.lab]=+t.value;else s.lab[t.dataset.labm]=t.dataset.labm==='salFrom'?+t.value:t.value;save();drawLab();return;}
       if(o){
         var ov=amt(t.value);
         if(o.dataset.out==='base') s.base=ov;
@@ -392,8 +394,10 @@ var Forecast=(function(){
       else if(t.dataset.frange){s.frange=t.dataset.frange;save();$$('[data-frange]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});update();}
       else if(t.dataset.level){s.level=t.dataset.level;save();$$('[data-level]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});update();}
       else if(t.dataset.olfs!=null){setOlFS(t.dataset.olfs==='1');}
-      else if(t.hasAttribute('data-labreset')){s.lab=Object.assign({},LAB0);save();$$('[data-lab] input',root).forEach(function(x){x.value=s.lab[x.closest('[data-lab]').dataset.lab];});$$('[data-labm]',root).forEach(function(x){x.value=x.dataset.labm==='salFrom'?'0':'';});drawLab();}
-      else if(t.dataset.labtag!=null){var tg=($('#lab-tags')._tags||[])[+t.dataset.labtag];if(tg){s.lab=Object.assign({},LAB0,s.lab||{});var v=tg.abs?tg.pct:Math.max(-100,Math.round((s.lab[tg.k]+tg.pct)/5)*5);var inp=$('[data-lab="'+tg.k+'"] input',root),mn=inp?+inp.min:-100;s.lab[tg.k]=Math.max(mn,v);save();if(inp) inp.value=s.lab[tg.k];t.classList.add('on');setTimeout(function(){t.classList.remove('on');},700);drawLab();}}
+      else if(t.hasAttribute('data-labadd')){s.lab=labIn();var mm=months(2);s.lab.ones.push({ym:mm[mm.length-1].ym,label:'',amt:0});save();labOnes();var li=$$('#lab-ones .lab-ol');if(li.length) li[li.length-1].focus();drawLab();}
+      else if(t.classList.contains('lab-odel')&&t.closest('[data-labone]')){s.lab=labIn();s.lab.ones.splice(+t.closest('[data-labone]').dataset.labone,1);save();labOnes();drawLab();}
+      else if(t.hasAttribute('data-labreset')){s.lab=Object.assign({},LAB0,{ones:[]});setTimeout(labOnes,0);save();$$('[data-lab] input',root).forEach(function(x){x.value=s.lab[x.closest('[data-lab]').dataset.lab];});$$('[data-labm]',root).forEach(function(x){x.value=x.dataset.labm==='salFrom'?'0':'';});drawLab();}
+      else if(t.dataset.labtag!=null){var tg=($('#lab-tags')._tags||[])[+t.dataset.labtag];if(tg){s.lab=labIn();var v=tg.abs?tg.pct:Math.max(-100,Math.round((s.lab[tg.k]+tg.pct)/5)*5);var inp=$('[data-lab="'+tg.k+'"] input',root),mn=inp?+inp.min:-100;s.lab[tg.k]=Math.max(mn,v);save();if(inp) inp.value=s.lab[tg.k];t.classList.add('on');setTimeout(function(){t.classList.remove('on');},700);drawLab();}}
       else if(t.dataset.hz){s.hz=+t.dataset.hz;save();$$('[data-hz]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});update();}
       else if(t.dataset.add==='plan'){var M=months(1);s.planned=(s.planned||[]).concat([{ym:M[0].ym,label:'',amt:0}]);save();rerender(function(){focusLast('.ol-plan .fp-lbl');});}
       else if(t.dataset.setTarget){s.target=+t.dataset.setTarget;save();var ti=$('[data-out="target"] input',root);if(ti) ti.value=s.target.toLocaleString('en-US');update();}
@@ -877,9 +881,26 @@ var Forecast=(function(){
   /* A playground on top of the outlook: levers change everyday habits, pay and one-off buys, and the lab shows
      the outlook's most likely Pay myself next to the same future with those changes. Each lever moves a month's
      saving by a fixed amount, so the tweaked path is the likely path plus the running total of those amounts. */
-  var LAB0={food:0,shop:0,ride:0,sur:0,sal:0,salFrom:0,one:0,oneYm:''};
+  var LAB0={food:0,shop:0,ride:0,sur:0,mama:0,touheed:0,bills:0,ess:0,sal:0,salFrom:0,ones:[]};
+  var LAB_KEYS=['food','shop','ride','sur','mama','touheed','bills','ess'];
   var labS=null,labPrev=null,labAnim=0;
-  function labIn(){var s=load();return Object.assign({},LAB0,s.lab||{});}
+  function labIn(){
+    var s=load(),L=Object.assign({},LAB0,s.lab||{});
+    // the single one-off buy of the first version becomes the first in the list
+    L.ones=Array.isArray(L.ones)?L.ones.slice():[];
+    if(L.one>0&&L.oneYm&&!L.ones.length) L.ones=[{ym:L.oneYm,label:'',amt:L.one}];
+    delete L.one;delete L.oneYm;
+    return L;
+  }
+  function labOnes(){
+    var box=$('#lab-ones');if(!box) return;
+    var L=labIn(),M=months(12);
+    box.innerHTML=L.ones.map(function(o,j){
+      return '<div class="lab-one" data-labone="'+j+'"><select class="inline lab-m lab-om" aria-label="Month">'+M.map(function(m){return '<option value="'+m.ym+'"'+(m.ym===o.ym?' selected':'')+'>'+m.name+' '+m.year+'</option>';}).join('')+'</select>'+
+        '<input class="inline lab-ol" value="'+esc(o.label||'')+'" placeholder="What (phone, trip...)" aria-label="What">'+money(o.amt||null,'lab-oa','Amount')+
+        '<button type="button" class="x lab-odel" aria-label="Remove">&times;</button></div>';
+    }).join('')+'<button type="button" class="btn sm" data-labadd>+ Add a one-off buy</button>';
+  }
   function labView(){
     var L=labIn(),M=months(12);
     var sl=function(k,lbl,min,max,step,unit){
@@ -895,29 +916,33 @@ var Forecast=(function(){
       '<div class="legend sm"><span><i class="sw lab-basesw"></i>As things are</span><span><i class="sw lab-tweaksw"></i>With your changes</span><span><i class="sw lab-gainsw"></i>Difference</span></div>'+
       '<div class="lab-grid"><div class="lab-levers"><div class="lab-h">Levers</div>'+
         sl('food','Food','-50','30','5')+sl('shop','Shopping','-100','50','5')+sl('ride','InDrive','-100','50','5')+sl('sur','Surprise buys','-100','100','10')+
+        '<div class="lab-h lab-h2">Fixed costs</div>'+
+        sl('mama','Groceries (to Mama)','-50','50','5')+sl('touheed','Transport (to Touheed)','-100','50','5')+sl('bills','Bills and subscriptions','-100','50','5')+sl('ess','Laundry and toiletries','-50','50','5')+
+        '<div class="lab-h lab-h2">Pay</div>'+
         '<div class="lab-row">'+sl('sal','Pay','-30','50','1')+'<span class="lab-from">from '+mo('salFrom',L.salFrom)+'</span></div>'+
-        '<div class="lab-row">'+sl('one','One-off buy','0','300000','5000')+'<span class="lab-from">in '+mo('oneYm',L.oneYm,'pick a month')+'</span></div>'+
+        '<div class="lab-h lab-h2">One-off buys <small id="lab-ones-t"></small></div><div class="lab-ones" id="lab-ones"></div>'+
       '</div><div class="lab-side"><div class="lab-h">Habit price tags <small>tap one to try it</small></div><div class="lab-tags" id="lab-tags"></div>'+
         '<div class="lab-h">Where a month’s pay goes <small id="lab-wf-s"></small></div><div class="lab-waffle" id="lab-wf"></div><div class="legend sm" id="lab-wf-l"></div></div></div>'+
     '</div></section>';
   }
   function labModel(S){
     var L=labIn(),O=S.O,P=S.P,lv=S.lv,rows=S.rows,H=rows.length;
-    var base={food:P.parts.food*lv,shop:shopMean(S.limit),ride:P.parts.ride*lv,sur:S.expSurprise};
-    var M=months(12).slice(0,H),pay=O.base;
+    var ess=P.parts.ess*lv-(O.groomAlt?S.gMonth/2:0);
+    var base={food:P.parts.food*lv,shop:shopMean(S.limit),ride:P.parts.ride*lv,sur:S.expSurprise,mama:P.mama,touheed:P.touheed,bills:P.bills,ess:ess};
+    var M=months(12).slice(0,H),pay=O.base,oneBy={};
+    L.ones.forEach(function(o){if(o.amt>0&&o.ym) oneBy[o.ym]=(oneBy[o.ym]||0)+o.amt;});
     var d=M.map(function(m,i){
-      var x=-(base.food*L.food+base.shop*L.shop+base.ride*L.ride+base.sur*L.sur)/100;
+      var x=-LAB_KEYS.reduce(function(a,k){return a+base[k]*L[k];},0)/100;
       if(i>=L.salFrom) x+=rows[i].salary*L.sal/100;
-      if(L.one>0&&L.oneYm===m.ym) x-=L.one;
-      return x;
+      return x-(oneBy[m.ym]||0);
     });
     var bp=S.band.map(function(b){return b.p50;}),tp=[],c=0;
     bp.forEach(function(v,i){c+=d[i];tp.push(v+c);});
-    var ess=P.parts.ess*lv-(O.groomAlt?S.gMonth/2:0);
     // a typical month after the changes, on base pay (with the pay change once it applies)
-    var spend={mama:P.mama,touheed:P.touheed,bills:P.bills,ess:ess,food:base.food*(1+L.food/100),ride:base.ride*(1+L.ride/100),shop:base.shop*(1+L.shop/100),sur:base.sur*(1+L.sur/100)};
+    var spend={};LAB_KEYS.forEach(function(k){spend[k]=base[k]*(1+L[k]/100);});
     var salT=pay*(1+L.sal/100);
-    return {L:L,S:S,base:base,d:d,bp:bp,tp:tp,M:M,start:S.start.bal,spend:spend,sal:salT,monthly:mean(d)};
+    var oneTot=M.reduce(function(a,m){return a+(oneBy[m.ym]||0);},0);
+    return {L:L,S:S,base:base,d:d,bp:bp,tp:tp,M:M,start:S.start.bal,spend:spend,sal:salT,monthly:mean(d),oneBy:oneBy,oneTot:oneTot};
   }
   function drawLab(S){
     if(S) labS=S;S=labS;var box=$('#lab-chart');if(!box||!S) return;
@@ -929,8 +954,11 @@ var Forecast=(function(){
     set('shop',pc(L.shop),fmt(r100(X.spend.shop))+' a month');
     set('ride',pc(L.ride),fmt(r100(X.spend.ride))+' a month');
     set('sur',pc(L.sur),fmt(r100(X.spend.sur))+' a month on average');
+    set('mama',pc(L.mama),fmt(r100(X.spend.mama))+' a month');
+    set('touheed',pc(L.touheed),fmt(r100(X.spend.touheed))+' a month');
+    set('bills',pc(L.bills),fmt(r100(X.spend.bills))+' a month');
+    set('ess',pc(L.ess),fmt(r100(X.spend.ess))+' a month on average');
     set('sal',pc(L.sal),fmt(r100(X.sal))+' a month');
-    set('one',L.one?fmt(L.one):'none',L.one&&!L.oneYm?'pick the month it lands in':L.one?'taken out once':'a phone, a trip, a course…');
     // headline: the difference at the end, counted up
     var gap=X.tp[end]-X.bp[end],when=X.M[end].name+' '+X.M[end].year;
     $('#lab-dk').textContent='By '+when;
@@ -953,6 +981,8 @@ var Forecast=(function(){
       if(k<1) labAnim=requestAnimationFrame(frame);};
     labAnim=requestAnimationFrame(frame);
     labTags(X);labWaffle(X);
+    var ob=$('#lab-ones');if(ob&&!ob.children.length) labOnes();
+    var ot=$('#lab-ones-t');if(ot) ot.textContent=X.oneTot?'\u2212'+fmt(X.oneTot)+' in all':'';
   }
   function tweenNum(el,to,f){
     var from=+el.dataset.v||0,t0=performance.now();el.dataset.v=to;cancelAnimationFrame(el._a||0);
@@ -978,7 +1008,9 @@ var Forecast=(function(){
     var gl=goal>=lo&&goal<=hi?'<line class="lab-goal" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+y(goal).toFixed(1)+'" y2="'+y(goal).toFixed(1)+'"/><text class="lab-goalt" x="'+(W-pr)+'" y="'+(y(goal)-5).toFixed(1)+'" text-anchor="end">'+esc(K(goal))+'</text>':'';
     var step=Math.max(1,Math.ceil(N*44/iw)),xl='<text class="ol-ax" x="'+x0+'" y="'+(Hh-6)+'" text-anchor="start">Now</text>';
     X.M.forEach(function(m,i){if((i+1)%step&&i!==N-1) return;xl+='<text class="ol-ax" x="'+x(i).toFixed(1)+'" y="'+(Hh-6)+'" text-anchor="'+(i===N-1?'end':'middle')+'">'+esc(m.name)+'</text>';});
-    var dots=tp.map(function(v,i){return '<circle class="lab-dot" cx="'+x(i).toFixed(1)+'" cy="'+y(v).toFixed(1)+'" r="'+(i===N-1?4.5:2.5)+'"/>';}).join('');
+    var dots=tp.map(function(v,i){return '<circle class="lab-dot" cx="'+x(i).toFixed(1)+'" cy="'+y(v).toFixed(1)+'" r="'+(i===N-1?4.5:2.5)+'"/>';}).join('')+
+      X.M.map(function(m,i){var a=X.oneBy[m.ym];if(!a) return '';var cx=x(i).toFixed(1);
+        return '<line class="lab-onel" x1="'+cx+'" x2="'+cx+'" y1="'+pt+'" y2="'+(pt+ih)+'"/><text class="lab-onet" x="'+cx+'" y="'+(pt+ih-4)+'" text-anchor="middle">\u2212'+esc(K(a))+'</text>';}).join('');
     box.innerHTML='<svg width="'+W+'" height="'+Hh+'" viewBox="0 0 '+W+' '+Hh+'" role="img" aria-label="Pay myself as things are and with your changes">'+
       '<defs><linearGradient id="lab-g" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--lab-tw)" stop-opacity=".35"/><stop offset="1" stop-color="var(--lab-tw)" stop-opacity="0"/></linearGradient></defs>'+
       g+gl+area+
@@ -988,7 +1020,9 @@ var Forecast=(function(){
     var hit=$('.lab-hit',box);
     var mv=function(e){var rc=box.getBoundingClientRect(),i=Math.max(0,Math.min(N-1,Math.round((e.clientX-rc.left-pl)/iw*N)-1));
       var dd=tp[i]-X.bp[i];
-      if(UIref) UIref.showTip('<div class="tt-h">'+esc(X.M[i].name+' '+X.M[i].year)+'</div><div class="tt-b">As things are '+esc(fmt(r100(X.bp[i])))+'<br>With your changes <b>'+esc(fmt(r100(tp[i])))+'</b><br>'+(dd>=0?'+':'−')+esc(fmt(Math.abs(r100(dd))))+'</div>',e.clientX,e.clientY);};
+      var on=X.L.ones.filter(function(o){return o.ym===X.M[i].ym&&o.amt>0;});
+      if(UIref) UIref.showTip('<div class="tt-h">'+esc(X.M[i].name+' '+X.M[i].year)+'</div><div class="tt-b">As things are '+esc(fmt(r100(X.bp[i])))+'<br>With your changes <b>'+esc(fmt(r100(tp[i])))+'</b><br>'+(dd>=0?'+':'\u2212')+esc(fmt(Math.abs(r100(dd))))+
+        on.map(function(o){return '<br>One-off: '+esc(o.label||'buy')+' \u2212'+esc(fmt(o.amt));}).join('')+'</div>',e.clientX,e.clientY);};
     hit.addEventListener('pointermove',mv);hit.addEventListener('pointerdown',mv);
     hit.addEventListener('pointerleave',function(){if(UIref) UIref.hideTip();});
   }
