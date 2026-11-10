@@ -915,9 +915,9 @@ var Forecast=(function(){
       '<div class="lab-chart" id="lab-chart"></div>'+
       '<div class="legend sm"><span><i class="sw lab-basesw"></i>As things are</span><span><i class="sw lab-tweaksw"></i>With your changes</span><span><i class="sw lab-gainsw"></i>Difference</span></div>'+
       '<div class="lab-grid"><div class="lab-levers"><div class="lab-h">Levers</div>'+
-        sl('food','Food','-50','30','5')+sl('shop','Shopping','-100','50','5')+sl('ride','InDrive','-100','50','5')+sl('sur','Surprise buys','-100','100','10')+
+        sl('food','Food','-100','100','5')+sl('shop','Shopping','-100','100','5')+sl('ride','InDrive','-100','100','5')+sl('sur','Surprise buys','-100','100','5')+
         '<div class="lab-h lab-h2">Fixed costs</div>'+
-        sl('mama','Groceries (to Mama)','-50','50','5')+sl('touheed','Transport (to Touheed)','-100','50','5')+sl('bills','Bills and subscriptions','-100','50','5')+sl('ess','Laundry and toiletries','-50','50','5')+
+        sl('mama','Groceries (to Mama)','-100','100','5')+sl('touheed','Transport (to Touheed)','-100','100','5')+sl('bills','Bills and subscriptions','-100','100','5')+sl('ess','Laundry and toiletries','-100','100','5')+
         '<div class="lab-h lab-h2">Pay</div>'+
         '<div class="lab-row">'+sl('sal','Pay','-30','50','1')+'<span class="lab-from">from '+mo('salFrom',L.salFrom)+'</span></div>'+
         '<div class="lab-h lab-h2">Planned expenses <small id="lab-pl-t"></small></div><div class="lab-plans">'+planRows('planned')+'<button type="button" class="btn sm" data-add="plan">+ Add planned expense</button></div>'+
