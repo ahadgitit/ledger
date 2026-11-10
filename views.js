@@ -574,31 +574,37 @@
     var tx=M.A.top.filter(function(t){return t.amt>0;});
     if(!tx.length){el.innerHTML='<div class="empty">No spending in this '+M.unit+' yet.</div>';return;}
     var acc={},cat={},it={},l1={},l2={};
-    var itemTot={};
-    tx.forEach(function(t){var k=itemKey(t.name);itemTot[k]=(itemTot[k]||0)+t.amt;});
-    var keep=Object.keys(itemTot).sort(function(a,b){return itemTot[b]-itemTot[a];}).slice(0,11);
+    /* each category splits into its own items: up to four (three on a phone) biggest by amount, and the rest of
+       that category as one "Other …" item, so every category's money can be followed to what it went on */
+    var W0=Math.max(320,el.clientWidth),per=W0<640?3:4,byCat={};
+    tx.forEach(function(t){var cn=catName(t.cat),k=itemKey(t.name),m=byCat[cn]=byCat[cn]||{};m[k]=(m[k]||0)+t.amt;});
+    var keepIn={};
+    Object.keys(byCat).forEach(function(cn){
+      var ks=Object.keys(byCat[cn]).sort(function(a,b){return byCat[cn][b]-byCat[cn][a];});
+      // a lone leftover item is shown as itself rather than as "Other"
+      keepIn[cn]=ks.length<=per+1?ks:ks.slice(0,per);
+    });
     tx.forEach(function(t){
-      var a='a:'+t.mode,cn=catName(t.cat),c='c:'+cn,k=itemKey(t.name),i=keep.indexOf(k)>=0?'i:'+k:'i:~';
+      var a='a:'+t.mode,cn=catName(t.cat),c='c:'+cn,k=itemKey(t.name),kept=keepIn[cn].indexOf(k)>=0,i=kept?'i:'+cn+'|'+k:'i:~'+cn;
       acc[a]=acc[a]||{id:a,label:t.mode,v:0,kind:'acct'};acc[a].v+=t.amt;
       cat[c]=cat[c]||{id:c,label:cn,v:0,kind:'cat',cls:cls(cn)};cat[c].v+=t.amt;
-      it[i]=it[i]||{id:i,label:i==='i:~'?'Everything else':t.name.trim(),v:0,kind:'item',key:i==='i:~'?null:k,cls:i==='i:~'?'cn':cls(cn)};it[i].v+=t.amt;
+      it[i]=it[i]||{id:i,label:kept?t.name.trim():'Other '+cn.toLowerCase(),v:0,kind:'item',key:kept?k:null,cat:c,other:!kept,cls:cls(cn)};it[i].v+=t.amt;
       var k1=a+'|'+c,k2=c+'|'+i;
       l1[k1]=l1[k1]||{s:a,t:c,v:0,cls:cls(cn)};l1[k1].v+=t.amt;
       l2[k2]=l2[k2]||{s:c,t:i,v:0,cls:cls(cn)};l2[k2].v+=t.amt;
     });
     function vals(o){return Object.keys(o).map(function(k){return o[k];}).sort(function(a,b){return b.v-a.v;});}
     var C=[vals(acc),vals(cat),vals(it)];
-    // items sit next to the category they come from (in the categories' order, biggest first within each),
-    // so a category's bands go straight across instead of crossing other categories'; "Everything else" last
-    var main={},catAt={};
+    // items sit next to their own category (in the categories' order, biggest first, its "Other" last),
+    // so a category's bands go straight across instead of crossing other categories'
+    var catAt={};
     C[1].forEach(function(n,i){catAt[n.id]=i;});
-    vals(l2).forEach(function(l){if(!main[l.t]) main[l.t]=l.s;});
-    var other=C[2].filter(function(n){return n.id==='i:~';});
-    C[2]=C[2].filter(function(n){return n.id!=='i:~';}).sort(function(a,b){return (catAt[main[a.id]]-catAt[main[b.id]])||(b.v-a.v);}).concat(other);
+    C[2].sort(function(a,b){return (catAt[a.cat]-catAt[b.cat])||((a.other?1:0)-(b.other?1:0))||(b.v-a.v);});
     var links=vals(l1).concat(vals(l2));
     var W=Math.max(320,el.clientWidth),narrow=W<640;
-    var labW=narrow?78:150,H=Math.max(360,Math.min(560,C[2].length*40));
-    var lay=Viz.sankey(C,links,W-labW*2,H,{nodeW:10,pad:narrow?6:10});
+    // tall enough that each item's two-line label can sit beside its bar
+    var labW=narrow?78:150,H=Math.max(360,Math.min(1400,C[2].length*(narrow?46:36)));
+    var lay=Viz.sankey(C,links,W-labW*2,H,{nodeW:10,pad:24});
     var s='<svg viewBox="0 0 '+W+' '+(H+18)+'" width="'+W+'" height="'+(H+18)+'" role="img" aria-label="Money flow from accounts to categories to items"><g transform="translate('+labW+',0)">';
     lay.links.forEach(function(l,i){
       s+='<path class="lk '+l.cls+'" d="'+l.d+'" data-s="'+esc(l.s)+'" data-t="'+esc(l.t)+'" data-tip="'+esc(l.sn.label+' → '+l.tn.label+'\n'+fmt(l.v)+' · '+pct(l.v,M.A.spent)+'% of spent')+'"/>';
