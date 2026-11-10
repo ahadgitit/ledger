@@ -398,7 +398,6 @@ var Forecast=(function(){
       else if(t.dataset.level){s.level=t.dataset.level;save();$$('[data-level]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});update();}
       else if(t.dataset.olfs!=null){setOlFS(t.dataset.olfs==='1');}
       else if(t.hasAttribute('data-labreset')){s.lab=Object.assign({},LAB0);save();$$('[data-lab] input',root).forEach(function(x){x.value=s.lab[x.closest('[data-lab]').dataset.lab];});$$('[data-labm]',root).forEach(function(x){x.value=x.dataset.labm==='salFrom'?'0':'';});drawLab();}
-      else if(t.dataset.labtag!=null){var tg=($('#lab-tags')._tags||[])[+t.dataset.labtag];if(tg){s.lab=labIn();var v=tg.abs?tg.pct:Math.max(-100,Math.round((s.lab[tg.k]+tg.pct)/5)*5);var inp=$('[data-lab="'+tg.k+'"] input',root),mn=inp?+inp.min:-100;s.lab[tg.k]=Math.max(mn,v);save();if(inp) inp.value=s.lab[tg.k];t.classList.add('on');setTimeout(function(){t.classList.remove('on');},700);drawLab();}}
       else if(t.dataset.hz){s.hz=+t.dataset.hz;save();$$('[data-hz]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});update();}
       else if(t.dataset.add==='plan'){var M=months(1);s.planned=(s.planned||[]).concat([{ym:M[0].ym,label:'',amt:0}]);save();var inLab=!!t.closest('#fp-lab');rerender(function(){focusLast((inLab?'#fp-lab ':'#fp-out ')+'.ol-plan:not(.ol-inflow) .fp-lbl');});}
       else if(t.dataset.setTarget){s.target=+t.dataset.setTarget;save();var ti=$('[data-out="target"] input',root);if(ti) ti.value=s.target.toLocaleString('en-US');update();}
@@ -923,8 +922,9 @@ var Forecast=(function(){
         '<div class="lab-h lab-h2">Planned expenses <small id="lab-pl-t"></small></div><div class="lab-plans">'+planRows('planned')+'<button type="button" class="btn sm" data-add="plan">+ Add planned expense</button></div>'+
         '<div class="lab-h lab-h2 lab-h-in">Planned money in <small id="lab-in-t"></small></div><div class="lab-plans">'+planRows('inflows')+'<button type="button" class="btn sm" data-add="inflow">+ Add planned money in</button></div>'+
         '<p class="fc-note">The same lists as in the savings outlook: change one and both move. They are part of both futures, so they shape the lines rather than the gap between them.</p>'+
-      '</div><div class="lab-side"><div class="lab-h">Habit price tags <small>tap one to try it</small></div><div class="lab-tags" id="lab-tags"></div>'+
-        '<div class="lab-h">Where a month’s pay goes <small id="lab-wf-s"></small></div><div class="lab-waffle" id="lab-wf"></div><div class="legend sm" id="lab-wf-l"></div></div></div>'+
+      '</div><div class="lab-side"><div class="lab-h">Saved each month <small>with your levers as they are</small></div>'+
+        '<div class="lab-sv-top" id="lab-sv-top"></div><div class="lab-jars" id="lab-jars"></div>'+
+        '<div class="legend sm"><span><i class="sw lab-jarsw"></i>Saved with your changes</span><span><i class="sw lab-ghostsw"></i>Saved as things are</span><span><i class="sw lab-negsw"></i>Taken from Pay myself</span></div></div></div>'+
     '</div></section>';
   }
   function labModel(S){
@@ -981,7 +981,7 @@ var Forecast=(function(){
       drawLabChart(box,X,X.tp.map(function(v,i){return from[i]+(v-from[i])*e;}),goal);
       if(k<1) labAnim=requestAnimationFrame(frame);};
     labAnim=requestAnimationFrame(frame);
-    labTags(X);labWaffle(X);
+    labJars(X);
     var pt0=$('#lab-pl-t'),it0=$('#lab-in-t');
     if(pt0) pt0.textContent=X.plTot?'\u2212'+fmt(X.plTot)+' over '+H+' months':'';
     if(it0) it0.textContent=X.inTot?'+'+fmt(X.inTot)+' over '+H+' months':'';
@@ -1032,35 +1032,35 @@ var Forecast=(function(){
     hit.addEventListener('pointermove',mv);hit.addEventListener('pointerdown',mv);
     hit.addEventListener('pointerleave',function(){if(UIref) UIref.hideTip();});
   }
-  // what your habits cost: the repeat food items and rides in your record, priced per week
-  function labTags(X){
-    var box=$('#lab-tags');if(!box) return;
-    var days=R.hist.reduce(function(a,x){return a+x.len;},0)||1,perM=MDAYS/days,m={};
-    R.hist.forEach(function(x){Object.keys(x.fi).forEach(function(k){var e=x.fi[k],t=m[k]||(m[k]={name:e.name,amt:0,n:0});t.amt+=e.amt;t.n+=e.n;});});
-    var tags=Object.keys(m).map(function(k){return m[k];}).filter(function(e){return e.n*perM>=4;}).sort(function(a,b){return b.amt-a.amt;}).slice(0,3).map(function(e){
-      var each=e.amt/e.n,save=each*52/12;
-      return {t:'One fewer '+e.name.toLowerCase()+' a week',d:Math.round(e.n*perM)+'× a month, about '+fmt(r100(each)||Math.round(each))+' each',save:save,k:'food',pct:-save/X.base.food*100};
+  /* each month's saving with the levers: how much Pay myself grows that month on the tweaked path (and on the
+     path as things are, for the faint marker). Jars share one scale; a month that takes from Pay myself drains below the line */
+  function labJars(X){
+    var box=$('#lab-jars');if(!box) return;
+    var H=X.tp.length,sv=[],bs=[];
+    for(var i=0;i<H;i++){sv.push(X.tp[i]-(i?X.tp[i-1]:X.start));bs.push(X.bp[i]-(i?X.bp[i-1]:X.start));}
+    var pos=Math.max.apply(null,sv.concat(bs).concat([1])),neg=Math.max(0,-Math.min.apply(null,sv.concat(bs).concat([0]))),rng=pos+neg,zero=neg/rng*100;
+    var pay=X.M.map(function(m,i){return X.S.rows[i].salary*(i>=X.L.salFrom?1+X.L.sal/100:1)+(X.inflow[m.ym]||0);});
+    var avg=mean(sv),avgB=mean(bs),tot=sv.reduce(function(a,v){return a+v;},0),share=avg/mean(pay)*100;
+    var hi=sv.indexOf(Math.max.apply(null,sv)),lo=sv.indexOf(Math.min.apply(null,sv));
+    $('#lab-sv-top').innerHTML='<div class="lab-sv-big"><b class="'+(avg>=0?'up':'down')+'" id="lab-sv-avg"></b><span>a month on average · <em>'+Math.round(share)+'%</em> of what comes in</span></div>'+
+      '<div class="lab-sv-meta"><span>'+(Math.abs(avg-avgB)<100?'same as now':(avg>avgB?'+':'−')+esc(fmt(Math.abs(r100(avg-avgB))))+' a month '+(avg>avgB?'more':'less')+' than now')+'</span>'+
+      '<span>'+esc(fmt(r100(tot)))+' over '+H+' months</span>'+
+      '<span>best '+esc(X.M[hi].name)+' '+esc(K(sv[hi]))+' · leanest '+esc(X.M[lo].name)+' '+esc(K(sv[lo]))+'</span></div>';
+    tweenNum($('#lab-sv-avg'),avg,function(v){return (v<0?'−':'')+fmt(Math.abs(r100(v)));});
+    var make=!box.children.length||box.children.length!==H;
+    if(make) box.innerHTML=X.M.map(function(m){return '<div class="jar"><b class="jar-v"></b><div class="jar-g"><i class="jar-z"></i><i class="jar-f"></i><i class="jar-gh"></i></div><span class="jar-m">'+esc(m.name)+'</span><small class="jar-p"></small></div>';}).join('');
+    $$('.jar',box).forEach(function(j,i){
+      var v=sv[i],b=bs[i],f=$('.jar-f',j),gh=$('.jar-gh',j);
+      j.classList.toggle('neg',v<0);
+      $('.jar-z',j).style.bottom=zero+'%';
+      f.style.bottom=(v>=0?zero:zero-(-v)/rng*100)+'%';f.style.height=(Math.abs(v)/rng*100)+'%';
+      gh.style.bottom=(zero+b/rng*100)+'%';
+      $('.jar-v',j).textContent=(v<0?'−':'')+K(Math.abs(v));
+      var sg=function(x){return (x<0?'\u2212':'')+fmt(Math.abs(r100(x)));};
+      $('.jar-p',j).textContent=pay[i]>0?(v<0?'\u2212':'')+Math.abs(Math.round(v/pay[i]*100))+'%':'';
+      var pl=X.plan[X.M[i].ym]||0,inn=X.inflow[X.M[i].ym]||0;
+      j.setAttribute('data-tip',X.M[i].name+' '+X.M[i].year+'\nSaved with your changes '+sg(v)+'\nAs things are '+sg(b)+(pl?'\nPlanned expense −'+fmt(pl):'')+(inn?'\nMoney in +'+fmt(inn):''));
     });
-    var rides=R.hist.reduce(function(a,x){return a+x.rides;},0),rideAmt=R.hist.reduce(function(a,x){return a+x.ride;},0);
-    if(rides>0&&X.base.ride>0){var fare=rideAmt/rides,sv=fare*52/12;tags.push({t:'One fewer InDrive a week',d:'about '+fmt(r100(fare))+' a ride',save:sv,k:'ride',pct:-sv/X.base.ride*100});}
-    if(X.base.sur>0) tags.push({t:'No surprise buys',d:'big one-offs, about '+fmt(r100(X.base.sur))+' a month on average',save:X.base.sur,k:'sur',pct:-100,abs:true});
-    if(X.base.shop>0) tags.push({t:'Shopping at half',d:'about '+fmt(r100(X.base.shop))+' a month now',save:X.base.shop/2,k:'shop',pct:-50,abs:true});
-    box.innerHTML=tags.map(function(g,i){
-      return '<button type="button" class="lab-tag" data-labtag="'+i+'"><span>'+esc(g.t)+'</span><small>'+esc(g.d)+'</small><b>+'+esc(fmt(r100(g.save)))+'<em>/month</em></b><i>+'+esc(K(g.save*12))+' a year</i></button>';
-    }).join('');
-    box._tags=tags;
-  }
-  // a month's pay as 100 squares, in the order money leaves
-  function labWaffle(X){
-    var box=$('#lab-wf');if(!box) return;
-    var sp=X.spend,parts=[['Mama','mama','c4'],['Touheed','touheed','c2'],['Bills','bills','c3'],['Essentials','ess','c7'],['Food','food','c1'],['InDrive','ride','c8'],['Shopping','shop','c5'],['Surprises','sur','cn']];
-    var tot=parts.reduce(function(a,p){return a+sp[p[1]];},0),saved=X.sal-tot,cells=[],of=Math.max(X.sal,tot);
-    parts.forEach(function(p){var n=Math.round(sp[p[1]]/of*100);for(var i=0;i<n;i++) cells.push(p[2]);});
-    var ns=Math.max(0,100-cells.length);for(var i=0;i<ns;i++) cells.push(saved>=0?'lab-sv':'lab-short');
-    cells=cells.slice(0,100);
-    box.innerHTML=cells.map(function(c,i){return '<i class="'+c+'" style="--d:'+(i*6)+'ms"></i>';}).join('');
-    $('#lab-wf-s').textContent=saved>=0?'saved '+fmt(r100(saved))+' of '+fmt(r100(X.sal))+' ('+Math.round(saved/X.sal*100)+'%)':'short by '+fmt(r100(-saved));
-    $('#lab-wf-l').innerHTML=parts.map(function(p){return '<span><i class="sw '+p[2]+'"></i>'+p[0]+' '+esc(K(sp[p[1]]))+'</span>';}).join('')+'<span><i class="sw lab-sv"></i>Saved</span>';
   }
 
   // ---------------------------------------------------------------- savings plan

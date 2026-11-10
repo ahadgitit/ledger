@@ -1011,3 +1011,26 @@ html.ol-fs-open,html.ol-fs-open body{overflow:hidden}
 .lab-h-in small{color:var(--lab-up)}
 .lab-onel.in{stroke:var(--lab-up)}
 .lab-onet.in{fill:var(--lab-up)}
+
+/* future lab: saved each month */
+.lab-sv-top{display:grid;gap:6px;margin-bottom:12px}
+.lab-sv-big{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.lab-sv-big b{font:700 34px/1 var(--font-ui);letter-spacing:-.02em}
+.lab-sv-big b.up{color:var(--lab-up)}.lab-sv-big b.down{color:var(--lab-down)}
+.lab-sv-big span{font-size:12.5px;color:var(--ink-2)}.lab-sv-big em{font-style:normal;color:var(--lab-tw);font-weight:600}
+.lab-sv-meta{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--ink-2)}
+.lab-jars{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:8px;align-items:end}
+.jar{display:grid;justify-items:center;gap:4px;min-width:0;cursor:default}
+.jar-v{font:600 11.5px var(--font-num);color:var(--ink);white-space:nowrap}
+.jar.neg .jar-v{color:var(--lab-down)}
+.jar-g{position:relative;width:100%;max-width:56px;height:190px;border-radius:12px 12px 10px 10px;background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.015));box-shadow:inset 0 0 0 1px var(--line-2);overflow:hidden}
+.jar-f{position:absolute;left:3px;right:3px;border-radius:7px;background:linear-gradient(180deg,#5fd49a,var(--lab-up) 55%,#1f7a4c);box-shadow:0 0 14px rgba(50,164,103,.45),inset 0 2px 0 rgba(255,255,255,.35);transition:height .45s cubic-bezier(.2,.8,.2,1),bottom .45s cubic-bezier(.2,.8,.2,1)}
+.jar.neg .jar-f{background:linear-gradient(180deg,#8a2f33,var(--lab-down));box-shadow:0 0 12px rgba(231,106,110,.4)}
+.jar-z{position:absolute;left:0;right:0;height:1px;background:var(--ink-2);opacity:.5}
+.jar-gh{position:absolute;left:-2px;right:-2px;height:2px;background:var(--c1);box-shadow:0 0 6px var(--c1);transition:bottom .45s cubic-bezier(.2,.8,.2,1)}
+.jar-m{font:600 11px var(--font-ui);color:var(--ink-2);text-transform:uppercase;letter-spacing:.06em}
+.jar-p{font:10.5px var(--font-num);color:var(--muted)}
+.sw.lab-jarsw{background:var(--lab-up)}.sw.lab-ghostsw{background:var(--c1);height:2px}.sw.lab-negsw{background:var(--lab-down)}
+@media (max-width:560px){.jar-g{height:150px}.lab-jars{gap:5px}.jar-v{font-size:10px}}
+@media (prefers-reduced-motion:reduce){.jar-f,.jar-gh{transition:none}}
+@media (min-width:761px){.lab-side{position:sticky;top:104px;align-self:start}}
