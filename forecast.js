@@ -275,7 +275,7 @@ var Forecast=(function(){
         '<div class="m-k" id="fp-ans-k"></div><div class="m-big" id="fp-ans"></div><div class="m-day" id="fp-ans-d"></div>'+
         '<p class="m-lead" id="fp-lead"></p>'+
         '<dl class="ledger fp-sum" id="fp-sum"></dl>'+
-      '</div></section>'+
+      '</div></section>'+labView()+
       ui.pnl('fp-daily','Food per day','what you spent each day against your daily limit','<div class="fd-stats" id="fd-stats"></div><div class="fd-chart" id="fd-chart"></div>'+
         '<div class="legend sm"><span><i class="sw c1"></i>Food spent</span><span><i class="sw fd-oversw"></i>Over the limit</span><span><i class="sw fd-limsw"></i>Daily limit</span><span><i class="sw fd-usesw"></i>Your usual</span></div>',
         {cls:'',tools:'<div class="seg sm" role="group" aria-label="Days shown"><button type="button" data-frange="cycle" aria-pressed="'+(load().frange!=='60')+'">This cycle</button><button type="button" data-frange="60" aria-pressed="'+(load().frange==='60')+'">Last 60 days</button></div>'})+
@@ -323,7 +323,8 @@ var Forecast=(function(){
       else s.ess[e.key]=e.amt;
     }
     root.addEventListener('input',function(e){
-      var t=e.target,o=t.closest('[data-out]'),pl=t.closest('[data-plan]');
+      var t=e.target,o=t.closest('[data-out]'),pl=t.closest('[data-plan]'),lb=t.closest('[data-lab]');
+      if(lb||t.dataset.labm){s.lab=Object.assign({},LAB0,s.lab||{});if(lb) s.lab[lb.dataset.lab]=+t.value;else s.lab[t.dataset.labm]=t.dataset.labm==='salFrom'?+t.value:t.value;save();drawLab();return;}
       if(o){
         var ov=amt(t.value);
         if(o.dataset.out==='base') s.base=ov;
@@ -391,6 +392,8 @@ var Forecast=(function(){
       else if(t.dataset.frange){s.frange=t.dataset.frange;save();$$('[data-frange]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});update();}
       else if(t.dataset.level){s.level=t.dataset.level;save();$$('[data-level]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});update();}
       else if(t.dataset.olfs!=null){setOlFS(t.dataset.olfs==='1');}
+      else if(t.hasAttribute('data-labreset')){s.lab=Object.assign({},LAB0);save();$$('[data-lab] input',root).forEach(function(x){x.value=s.lab[x.closest('[data-lab]').dataset.lab];});$$('[data-labm]',root).forEach(function(x){x.value=x.dataset.labm==='salFrom'?'0':'';});drawLab();}
+      else if(t.dataset.labtag!=null){var tg=($('#lab-tags')._tags||[])[+t.dataset.labtag];if(tg){s.lab=Object.assign({},LAB0,s.lab||{});var v=tg.abs?tg.pct:Math.max(-100,Math.round((s.lab[tg.k]+tg.pct)/5)*5);var inp=$('[data-lab="'+tg.k+'"] input',root),mn=inp?+inp.min:-100;s.lab[tg.k]=Math.max(mn,v);save();if(inp) inp.value=s.lab[tg.k];t.classList.add('on');setTimeout(function(){t.classList.remove('on');},700);drawLab();}}
       else if(t.dataset.hz){s.hz=+t.dataset.hz;save();$$('[data-hz]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});update();}
       else if(t.dataset.add==='plan'){var M=months(1);s.planned=(s.planned||[]).concat([{ym:M[0].ym,label:'',amt:0}]);save();rerender(function(){focusLast('.ol-plan .fp-lbl');});}
       else if(t.dataset.setTarget){s.target=+t.dataset.setTarget;save();var ti=$('[data-out="target"] input',root);if(ti) ti.value=s.target.toLocaleString('en-US');update();}
@@ -870,6 +873,156 @@ var Forecast=(function(){
     '</div></section>';
   }
 
+  // ---------------------------------------------------------------- future lab
+  /* A playground on top of the outlook: levers change everyday habits, pay and one-off buys, and the lab shows
+     the outlook's most likely Pay myself next to the same future with those changes. Each lever moves a month's
+     saving by a fixed amount, so the tweaked path is the likely path plus the running total of those amounts. */
+  var LAB0={food:0,shop:0,ride:0,sur:0,sal:0,salFrom:0,one:0,oneYm:''};
+  var labS=null,labPrev=null,labAnim=0;
+  function labIn(){var s=load();return Object.assign({},LAB0,s.lab||{});}
+  function labView(){
+    var L=labIn(),M=months(12);
+    var sl=function(k,lbl,min,max,step,unit){
+      return '<label class="lab-sl" data-lab="'+k+'"><span class="lab-sl-h"><b>'+lbl+'</b><output id="lab-o-'+k+'"></output></span>'+
+        '<input type="range" min="'+min+'" max="'+max+'" step="'+step+'" value="'+L[k]+'" aria-label="'+esc(lbl)+'"><small id="lab-s-'+k+'"></small></label>';
+    };
+    var mo=function(k,sel,none){return '<select class="inline lab-m" data-labm="'+k+'" aria-label="Month">'+(none?'<option value="">'+none+'</option>':'')+M.map(function(m,i){var v=k==='salFrom'?String(i):m.ym;return '<option value="'+v+'"'+(String(sel)===v?' selected':'')+'>'+m.name+' '+m.year+'</option>';}).join('')+'</select>';};
+    return '<section class="pnl lab" id="fp-lab"><header class="pnl-h"><span class="pnl-t"><i class="pnl-dot"></i>Future lab</span><span class="pnl-m">pull a lever and watch your future move</span>'+
+      '<span class="pnl-tools"><button type="button" class="btn ghost sm" data-labreset>Reset levers</button></span></header><div class="pnl-b">'+
+      '<div class="lab-top"><div class="lab-delta"><span class="lbl" id="lab-dk"></span><b id="lab-d"></b><small id="lab-ds"></small></div>'+
+        '<div class="lab-mile" id="lab-mile"></div></div>'+
+      '<div class="lab-chart" id="lab-chart"></div>'+
+      '<div class="legend sm"><span><i class="sw lab-basesw"></i>As things are</span><span><i class="sw lab-tweaksw"></i>With your changes</span><span><i class="sw lab-gainsw"></i>Difference</span></div>'+
+      '<div class="lab-grid"><div class="lab-levers"><div class="lab-h">Levers</div>'+
+        sl('food','Food','-50','30','5')+sl('shop','Shopping','-100','50','5')+sl('ride','InDrive','-100','50','5')+sl('sur','Surprise buys','-100','100','10')+
+        '<div class="lab-row">'+sl('sal','Pay','-30','50','1')+'<span class="lab-from">from '+mo('salFrom',L.salFrom)+'</span></div>'+
+        '<div class="lab-row">'+sl('one','One-off buy','0','300000','5000')+'<span class="lab-from">in '+mo('oneYm',L.oneYm,'pick a month')+'</span></div>'+
+      '</div><div class="lab-side"><div class="lab-h">Habit price tags <small>tap one to try it</small></div><div class="lab-tags" id="lab-tags"></div>'+
+        '<div class="lab-h">Where a month’s pay goes <small id="lab-wf-s"></small></div><div class="lab-waffle" id="lab-wf"></div><div class="legend sm" id="lab-wf-l"></div></div></div>'+
+    '</div></section>';
+  }
+  function labModel(S){
+    var L=labIn(),O=S.O,P=S.P,lv=S.lv,rows=S.rows,H=rows.length;
+    var base={food:P.parts.food*lv,shop:shopMean(S.limit),ride:P.parts.ride*lv,sur:S.expSurprise};
+    var M=months(12).slice(0,H),pay=O.base;
+    var d=M.map(function(m,i){
+      var x=-(base.food*L.food+base.shop*L.shop+base.ride*L.ride+base.sur*L.sur)/100;
+      if(i>=L.salFrom) x+=rows[i].salary*L.sal/100;
+      if(L.one>0&&L.oneYm===m.ym) x-=L.one;
+      return x;
+    });
+    var bp=S.band.map(function(b){return b.p50;}),tp=[],c=0;
+    bp.forEach(function(v,i){c+=d[i];tp.push(v+c);});
+    var ess=P.parts.ess*lv-(O.groomAlt?S.gMonth/2:0);
+    // a typical month after the changes, on base pay (with the pay change once it applies)
+    var spend={mama:P.mama,touheed:P.touheed,bills:P.bills,ess:ess,food:base.food*(1+L.food/100),ride:base.ride*(1+L.ride/100),shop:base.shop*(1+L.shop/100),sur:base.sur*(1+L.sur/100)};
+    var salT=pay*(1+L.sal/100);
+    return {L:L,S:S,base:base,d:d,bp:bp,tp:tp,M:M,start:S.start.bal,spend:spend,sal:salT,monthly:mean(d)};
+  }
+  function drawLab(S){
+    if(S) labS=S;S=labS;var box=$('#lab-chart');if(!box||!S) return;
+    var X=labModel(S),L=X.L,H=X.bp.length,end=H-1;
+    // lever readouts
+    var pc=function(v){return (v>0?'+':'')+v+'%';};
+    var set=function(k,o,sm){var a=$('#lab-o-'+k),b=$('#lab-s-'+k);if(a) a.textContent=o;if(b) b.textContent=sm;};
+    set('food',pc(L.food),fmt(r100(X.spend.food))+' a month · '+fmt(r100(X.spend.food/MDAYS))+' a day');
+    set('shop',pc(L.shop),fmt(r100(X.spend.shop))+' a month');
+    set('ride',pc(L.ride),fmt(r100(X.spend.ride))+' a month');
+    set('sur',pc(L.sur),fmt(r100(X.spend.sur))+' a month on average');
+    set('sal',pc(L.sal),fmt(r100(X.sal))+' a month');
+    set('one',L.one?fmt(L.one):'none',L.one&&!L.oneYm?'pick the month it lands in':L.one?'taken out once':'a phone, a trip, a course…');
+    // headline: the difference at the end, counted up
+    var gap=X.tp[end]-X.bp[end],when=X.M[end].name+' '+X.M[end].year;
+    $('#lab-dk').textContent='By '+when;
+    var db=$('#lab-d');db.className=gap>=0?'up':'down';
+    tweenNum(db,gap,function(v){return (v>=0?'+':'−')+fmt(Math.abs(r100(v)));});
+    $('#lab-ds').innerHTML=Math.abs(gap)<100?'pull a lever below to see what changes':'Pay myself '+esc(fmt(r100(X.tp[end])))+' instead of '+esc(fmt(r100(X.bp[end])))+' · '+(X.monthly>=0?'+':'−')+esc(fmt(Math.abs(r100(X.monthly))))+' a month on average';
+    // milestone: your goal, or the next round 50k past where things are heading now
+    var s=load(),goal=s.goal>0?s.goal:Math.ceil((Math.max(X.bp[end],X.start)+1)/50000)*50000;
+    var hit=function(p){for(var i=0;i<p.length;i++) if(p[i]>=goal) return i;return -1;};
+    var hb=hit(X.bp),ht=hit(X.tp),nm=function(i){return i<0?'not within '+H+' months':X.M[i].name+' '+X.M[i].year;};
+    var sh=hb>=0&&ht>=0?hb-ht:ht>=0?null:hb>=0?-99:'none';
+    $('#lab-mile').innerHTML='<span class="lbl">'+(s.goal>0?'Your goal':'Next milestone')+' · '+esc(fmt(goal))+'</span>'+
+      '<div class="lab-ms"><span>Now <b>'+esc(nm(hb))+'</b></span><i>→</i><span>Tweaked <b>'+esc(nm(ht))+'</b></span></div>'+
+      '<small>'+(sh==='none'?'neither gets there in '+H+' months: pull harder, or look 12 months ahead in the outlook':sh===null?'only reachable with your changes':sh===-99?'out of reach with your changes':sh>0?sh+' month'+(sh===1?'':'s')+' sooner':sh<0?(-sh)+' month'+(sh===-1?'':'s')+' later':'same month')+'</small>';
+    // two futures, animated from the previous tweak
+    var from=labPrev&&labPrev.length===H?labPrev:X.tp.slice();labPrev=X.tp.slice();
+    var t0=performance.now();cancelAnimationFrame(labAnim);
+    var frame=function(now){var k=Math.min(1,(now-t0)/320),e=1-Math.pow(1-k,3);
+      drawLabChart(box,X,X.tp.map(function(v,i){return from[i]+(v-from[i])*e;}),goal);
+      if(k<1) labAnim=requestAnimationFrame(frame);};
+    labAnim=requestAnimationFrame(frame);
+    labTags(X);labWaffle(X);
+  }
+  function tweenNum(el,to,f){
+    var from=+el.dataset.v||0,t0=performance.now();el.dataset.v=to;cancelAnimationFrame(el._a||0);
+    var step=function(now){var k=Math.min(1,(now-t0)/320),e=1-Math.pow(1-k,3);el.textContent=f(from+(to-from)*e);if(k<1) el._a=requestAnimationFrame(step);};
+    el._a=requestAnimationFrame(step);
+  }
+  function drawLabChart(box,X,tp,goal){
+    var W=Math.max(300,box.clientWidth),Hh=W<520?210:250,pl=48,pr=14,pt=16,pb=26,iw=W-pl-pr,ih=Hh-pt-pb,N=tp.length;
+    var all=[X.start].concat(X.bp,tp),lo=Math.min.apply(null,all),hi=Math.max.apply(null,all.concat([goal<=Math.max.apply(null,all)*1.15?goal:0]));
+    var pad=(hi-lo)*0.12||10000;lo-=pad;hi+=pad;
+    var x=function(i){return pl+iw*(i+1)/N;},y=function(v){return pt+ih*(1-(v-lo)/(hi-lo));},x0=pl;
+    var line=function(p){return 'M'+x0+','+y(X.start).toFixed(1)+p.map(function(v,i){return 'L'+x(i).toFixed(1)+','+y(v).toFixed(1);}).join('');};
+    // the gap between the two futures, month by month: green where your changes are ahead, red where behind
+    // (a month where the lines cross is split at the crossing)
+    var area='',px=[x0].concat(tp.map(function(v,i){return x(i);})),pt2=[X.start].concat(tp),pb2=[X.start].concat(X.bp);
+    for(var j=1;j<px.length;j++){
+      var d0=pt2[j-1]-pb2[j-1],d1=pt2[j]-pb2[j],seg=function(xa,ta,ba,xb,tb,bb,up){return '<path class="lab-area '+(up?'up':'down')+'" d="M'+xa.toFixed(1)+','+y(ta).toFixed(1)+'L'+xb.toFixed(1)+','+y(tb).toFixed(1)+'L'+xb.toFixed(1)+','+y(bb).toFixed(1)+'L'+xa.toFixed(1)+','+y(ba).toFixed(1)+'Z"/>';};
+      if(d0*d1<0){var f=d0/(d0-d1),xc=px[j-1]+(px[j]-px[j-1])*f,vc=pb2[j-1]+(pb2[j]-pb2[j-1])*f;
+        area+=seg(px[j-1],pt2[j-1],pb2[j-1],xc,vc,vc,d0>0)+seg(xc,vc,vc,px[j],pt2[j],pb2[j],d1>0);}
+      else area+=seg(px[j-1],pt2[j-1],pb2[j-1],px[j],pt2[j],pb2[j],d0+d1>=0);
+    }
+    var g='';for(var t=0;t<=4;t++){var v=lo+(hi-lo)*t/4;g+='<line class="ol-grid" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+y(v).toFixed(1)+'" y2="'+y(v).toFixed(1)+'"/><text class="ol-ax" x="'+(pl-6)+'" y="'+(y(v)+3.5).toFixed(1)+'" text-anchor="end">'+esc(K(v))+'</text>';}
+    var gl=goal>=lo&&goal<=hi?'<line class="lab-goal" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+y(goal).toFixed(1)+'" y2="'+y(goal).toFixed(1)+'"/><text class="lab-goalt" x="'+(W-pr)+'" y="'+(y(goal)-5).toFixed(1)+'" text-anchor="end">'+esc(K(goal))+'</text>':'';
+    var step=Math.max(1,Math.ceil(N*44/iw)),xl='<text class="ol-ax" x="'+x0+'" y="'+(Hh-6)+'" text-anchor="start">Now</text>';
+    X.M.forEach(function(m,i){if((i+1)%step&&i!==N-1) return;xl+='<text class="ol-ax" x="'+x(i).toFixed(1)+'" y="'+(Hh-6)+'" text-anchor="'+(i===N-1?'end':'middle')+'">'+esc(m.name)+'</text>';});
+    var dots=tp.map(function(v,i){return '<circle class="lab-dot" cx="'+x(i).toFixed(1)+'" cy="'+y(v).toFixed(1)+'" r="'+(i===N-1?4.5:2.5)+'"/>';}).join('');
+    box.innerHTML='<svg width="'+W+'" height="'+Hh+'" viewBox="0 0 '+W+' '+Hh+'" role="img" aria-label="Pay myself as things are and with your changes">'+
+      '<defs><linearGradient id="lab-g" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--lab-tw)" stop-opacity=".35"/><stop offset="1" stop-color="var(--lab-tw)" stop-opacity="0"/></linearGradient></defs>'+
+      g+gl+area+
+      '<path class="lab-base" d="'+line(X.bp)+'"/><path class="lab-tw" d="'+line(tp)+'"/>'+dots+
+      '<circle class="ol-dot" cx="'+x0+'" cy="'+y(X.start).toFixed(1)+'" r="4"/>'+xl+
+      '<rect class="ol-hit lab-hit" x="'+pl+'" y="0" width="'+iw+'" height="'+(pt+ih)+'"/></svg>';
+    var hit=$('.lab-hit',box);
+    var mv=function(e){var rc=box.getBoundingClientRect(),i=Math.max(0,Math.min(N-1,Math.round((e.clientX-rc.left-pl)/iw*N)-1));
+      var dd=tp[i]-X.bp[i];
+      if(UIref) UIref.showTip('<div class="tt-h">'+esc(X.M[i].name+' '+X.M[i].year)+'</div><div class="tt-b">As things are '+esc(fmt(r100(X.bp[i])))+'<br>With your changes <b>'+esc(fmt(r100(tp[i])))+'</b><br>'+(dd>=0?'+':'−')+esc(fmt(Math.abs(r100(dd))))+'</div>',e.clientX,e.clientY);};
+    hit.addEventListener('pointermove',mv);hit.addEventListener('pointerdown',mv);
+    hit.addEventListener('pointerleave',function(){if(UIref) UIref.hideTip();});
+  }
+  // what your habits cost: the repeat food items and rides in your record, priced per week
+  function labTags(X){
+    var box=$('#lab-tags');if(!box) return;
+    var days=R.hist.reduce(function(a,x){return a+x.len;},0)||1,perM=MDAYS/days,m={};
+    R.hist.forEach(function(x){Object.keys(x.fi).forEach(function(k){var e=x.fi[k],t=m[k]||(m[k]={name:e.name,amt:0,n:0});t.amt+=e.amt;t.n+=e.n;});});
+    var tags=Object.keys(m).map(function(k){return m[k];}).filter(function(e){return e.n*perM>=4;}).sort(function(a,b){return b.amt-a.amt;}).slice(0,3).map(function(e){
+      var each=e.amt/e.n,save=each*52/12;
+      return {t:'One fewer '+e.name.toLowerCase()+' a week',d:Math.round(e.n*perM)+'× a month, about '+fmt(r100(each)||Math.round(each))+' each',save:save,k:'food',pct:-save/X.base.food*100};
+    });
+    var rides=R.hist.reduce(function(a,x){return a+x.rides;},0),rideAmt=R.hist.reduce(function(a,x){return a+x.ride;},0);
+    if(rides>0&&X.base.ride>0){var fare=rideAmt/rides,sv=fare*52/12;tags.push({t:'One fewer InDrive a week',d:'about '+fmt(r100(fare))+' a ride',save:sv,k:'ride',pct:-sv/X.base.ride*100});}
+    if(X.base.sur>0) tags.push({t:'No surprise buys',d:'big one-offs, about '+fmt(r100(X.base.sur))+' a month on average',save:X.base.sur,k:'sur',pct:-100,abs:true});
+    if(X.base.shop>0) tags.push({t:'Shopping at half',d:'about '+fmt(r100(X.base.shop))+' a month now',save:X.base.shop/2,k:'shop',pct:-50,abs:true});
+    box.innerHTML=tags.map(function(g,i){
+      return '<button type="button" class="lab-tag" data-labtag="'+i+'"><span>'+esc(g.t)+'</span><small>'+esc(g.d)+'</small><b>+'+esc(fmt(r100(g.save)))+'<em>/month</em></b><i>+'+esc(K(g.save*12))+' a year</i></button>';
+    }).join('');
+    box._tags=tags;
+  }
+  // a month's pay as 100 squares, in the order money leaves
+  function labWaffle(X){
+    var box=$('#lab-wf');if(!box) return;
+    var sp=X.spend,parts=[['Mama','mama','c4'],['Touheed','touheed','c2'],['Bills','bills','c3'],['Essentials','ess','c7'],['Food','food','c1'],['InDrive','ride','c8'],['Shopping','shop','c5'],['Surprises','sur','cn']];
+    var tot=parts.reduce(function(a,p){return a+sp[p[1]];},0),saved=X.sal-tot,cells=[],of=Math.max(X.sal,tot);
+    parts.forEach(function(p){var n=Math.round(sp[p[1]]/of*100);for(var i=0;i<n;i++) cells.push(p[2]);});
+    var ns=Math.max(0,100-cells.length);for(var i=0;i<ns;i++) cells.push(saved>=0?'lab-sv':'lab-short');
+    cells=cells.slice(0,100);
+    box.innerHTML=cells.map(function(c,i){return '<i class="'+c+'" style="--d:'+(i*6)+'ms"></i>';}).join('');
+    $('#lab-wf-s').textContent=saved>=0?'saved '+fmt(r100(saved))+' of '+fmt(r100(X.sal))+' ('+Math.round(saved/X.sal*100)+'%)':'short by '+fmt(r100(-saved));
+    $('#lab-wf-l').innerHTML=parts.map(function(p){return '<span><i class="sw '+p[2]+'"></i>'+p[0]+' '+esc(K(sp[p[1]]))+'</span>';}).join('')+'<span><i class="sw lab-sv"></i>Saved</span>';
+  }
+
   // ---------------------------------------------------------------- savings plan
   function planView(){
     var s=load(),M=months(12);
@@ -1199,6 +1352,7 @@ var Forecast=(function(){
       '<tr class="ol-rec ol-now-row"><td>'+esc(R.cur.name)+' <small>'+(S.start.dip<0?'now, recommended (actual '+esc(fmt(R.saved))+', less the shortfall)':'now, actual')+'</small></td><td class="n" colspan="8"></td><td class="n">'+esc(fmt(S.start.bal))+'</td></tr>'+
       rows.map(function(r,i){return '<tr><td>'+esc(r.m.name+' '+r.m.year)+'</td><td class="n">'+esc(fmt(r.salary))+'</td><td class="n">'+esc(fmt(r.mama+r.touheed))+'</td><td class="n">'+esc(fmt(r.bills))+'</td><td class="n">'+esc(fmt(r100(r.spend)))+'</td><td class="n'+(r.shop>S.limit?' ol-over':'')+'">'+esc(fmt(r.shop))+'</td><td class="n">'+(r.planned?esc(fmt(r.planned)):'–')+'</td><td class="n">'+(r.inflow?'+'+esc(fmt(r.inflow)):'–')+'</td><td class="n">'+esc(fmtS(r100(r.saveP50)))+'</td><td class="n">'+esc(fmt(r100(B[i].p50)))+'</td></tr>';}).join('')+'</tbody>';
     drawPlan(I,C,S);
+    drawLab(S);
   }
 
   // a bill's estimate for a cycle, shared with the Overview
