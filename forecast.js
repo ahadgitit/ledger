@@ -324,8 +324,6 @@ var Forecast=(function(){
     }
     root.addEventListener('input',function(e){
       var t=e.target,o=t.closest('[data-out]'),pl=t.closest('[data-plan]'),lb=t.closest('[data-lab]');
-      var lo=t.closest('[data-labone]');
-      if(lo){s.lab=labIn();var o=s.lab.ones[+lo.dataset.labone];if(o){if(t.classList.contains('lab-om')) o.ym=t.value;else if(t.classList.contains('lab-ol')) o.label=t.value;else o.amt=amt(t.value)||0;save();drawLab();}return;}
       if(lb||t.dataset.labm){s.lab=labIn();if(lb) s.lab[lb.dataset.lab]=+t.value;else s.lab[t.dataset.labm]=t.dataset.labm==='salFrom'?+t.value:t.value;save();drawLab();return;}
       if(o){
         var ov=amt(t.value);
@@ -345,6 +343,11 @@ var Forecast=(function(){
       if(pl){
         var P=s[pl.dataset.kind||'planned'][+pl.dataset.plan];
         if(t.classList.contains('ol-m')) P.ym=t.value;else if(t.classList.contains('fp-lbl')) P.label=t.value;else P.amt=amt(t.value)||0;
+        $$('[data-plan="'+pl.dataset.plan+'"][data-kind="'+(pl.dataset.kind||'planned')+'"]',root).forEach(function(r){
+          if(r===pl) return;
+          var sel=$('select',r),lbl=$('.fp-lbl',r),mi=$('.fp-in input',r);
+          if(sel) sel.value=P.ym;if(lbl) lbl.value=P.label||'';if(mi) mi.value=P.amt?P.amt.toLocaleString('en-US'):'';
+        });
         save();update();return;
       }
       var row=t.closest('[data-bill],[data-ess],[data-cap],[data-adv]');
@@ -394,14 +397,12 @@ var Forecast=(function(){
       else if(t.dataset.frange){s.frange=t.dataset.frange;save();$$('[data-frange]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});update();}
       else if(t.dataset.level){s.level=t.dataset.level;save();$$('[data-level]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});update();}
       else if(t.dataset.olfs!=null){setOlFS(t.dataset.olfs==='1');}
-      else if(t.hasAttribute('data-labadd')){s.lab=labIn();var mm=months(2);s.lab.ones.push({ym:mm[mm.length-1].ym,label:'',amt:0});save();labOnes();var li=$$('#lab-ones .lab-ol');if(li.length) li[li.length-1].focus();drawLab();}
-      else if(t.classList.contains('lab-odel')&&t.closest('[data-labone]')){s.lab=labIn();s.lab.ones.splice(+t.closest('[data-labone]').dataset.labone,1);save();labOnes();drawLab();}
-      else if(t.hasAttribute('data-labreset')){s.lab=Object.assign({},LAB0,{ones:[]});setTimeout(labOnes,0);save();$$('[data-lab] input',root).forEach(function(x){x.value=s.lab[x.closest('[data-lab]').dataset.lab];});$$('[data-labm]',root).forEach(function(x){x.value=x.dataset.labm==='salFrom'?'0':'';});drawLab();}
+      else if(t.hasAttribute('data-labreset')){s.lab=Object.assign({},LAB0);save();$$('[data-lab] input',root).forEach(function(x){x.value=s.lab[x.closest('[data-lab]').dataset.lab];});$$('[data-labm]',root).forEach(function(x){x.value=x.dataset.labm==='salFrom'?'0':'';});drawLab();}
       else if(t.dataset.labtag!=null){var tg=($('#lab-tags')._tags||[])[+t.dataset.labtag];if(tg){s.lab=labIn();var v=tg.abs?tg.pct:Math.max(-100,Math.round((s.lab[tg.k]+tg.pct)/5)*5);var inp=$('[data-lab="'+tg.k+'"] input',root),mn=inp?+inp.min:-100;s.lab[tg.k]=Math.max(mn,v);save();if(inp) inp.value=s.lab[tg.k];t.classList.add('on');setTimeout(function(){t.classList.remove('on');},700);drawLab();}}
       else if(t.dataset.hz){s.hz=+t.dataset.hz;save();$$('[data-hz]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});update();}
-      else if(t.dataset.add==='plan'){var M=months(1);s.planned=(s.planned||[]).concat([{ym:M[0].ym,label:'',amt:0}]);save();rerender(function(){focusLast('.ol-plan .fp-lbl');});}
+      else if(t.dataset.add==='plan'){var M=months(1);s.planned=(s.planned||[]).concat([{ym:M[0].ym,label:'',amt:0}]);save();var inLab=!!t.closest('#fp-lab');rerender(function(){focusLast((inLab?'#fp-lab ':'#fp-out ')+'.ol-plan:not(.ol-inflow) .fp-lbl');});}
       else if(t.dataset.setTarget){s.target=+t.dataset.setTarget;save();var ti=$('[data-out="target"] input',root);if(ti) ti.value=s.target.toLocaleString('en-US');update();}
-      else if(t.dataset.add==='inflow'){var M2=months(1);s.inflows=(s.inflows||[]).concat([{ym:M2[0].ym,label:'',amt:0}]);save();rerender(function(){focusLast('.ol-inflow .fp-lbl');});}
+      else if(t.dataset.add==='inflow'){var M2=months(1);s.inflows=(s.inflows||[]).concat([{ym:M2[0].ym,label:'',amt:0}]);save();var inLab2=!!t.closest('#fp-lab');rerender(function(){focusLast((inLab2?'#fp-lab ':'#fp-out ')+'.ol-inflow .fp-lbl');});}
       else if(t.classList.contains('fp-del')&&t.closest('[data-plan]')){var dp=t.closest('[data-plan]');s[dp.dataset.kind||'planned'].splice(+dp.dataset.plan,1);save();rerender();}
       else if(t.dataset.add==='bill'){var o=bucket();o._extra=(o._extra||[]).concat([{label:'',amt:0}]);save();rerender(function(){focusLast('[data-bill] .fp-lbl');});}
       else if(t.dataset.add==='ess'){s.essExtra=(s.essExtra||[]).concat([{label:'',amt:0}]);save();rerender(function(){focusLast('[data-ess] .fp-lbl');});}
@@ -423,7 +424,7 @@ var Forecast=(function(){
     update();
     drawCf();
   }
-  function focusLast(sel){var l=$$('#fp '+sel);if(l.length) l[l.length-1].focus();}
+  function focusLast(sel){var l=$$(sel.charAt(0)==='#'?sel:'#fp '+sel);if(l.length) l[l.length-1].focus({preventScroll:true});}
   function rerender(then){
     var y=window.scrollY;if(window.LedgerUI) LedgerUI.rerender();window.scrollTo(0,y);if(then) then();
   }
@@ -838,19 +839,23 @@ var Forecast=(function(){
     return {O:O,P:P,lv:lv,rows:rows,band:band,start:st0,expSurprise:expSurprise,gMonth:gMonth,plan:plan,inflow:inflow,lam:lam,pSurprise:pSurprise,lumpLim:lumpLim,lumpAvg:lumps.length?mean(lumps):0,spread:ratios,limit:limit,planMonthly:planMonthly};
   }
 
+  // planned expenses and planned money in: one list each, shown (and editable) in the outlook and in the lab
+  function planRows(kind){
+    var O=oInputs(),M=months(12),inflow=kind==='inflows',ph=inflow?'From where':'What for';
+    var opts=function(sel){return M.map(function(m){return '<option value="'+m.ym+'"'+(m.ym===sel?' selected':'')+'>'+m.name+' '+m.year+'</option>';}).join('');};
+    return (inflow?O.inflows:O.planned).map(function(p,j){
+      return '<div class="fp-row ol-plan'+(inflow?' ol-inflow':'')+'" data-plan="'+j+'" data-kind="'+kind+'"><select class="inline ol-m" aria-label="Month">'+opts(p.ym)+'</select>'+
+        '<div class="fp-name"><input class="inline fp-lbl" value="'+esc(p.label||'')+'" placeholder="'+ph+'" aria-label="'+ph+'"></div>'+
+        money(p.amt)+'<button type="button" class="x fp-del" aria-label="Remove">&times;</button></div>';
+    }).join('');
+  }
   function outlookView(){
     var O=oInputs(),M=months(12),nm=M[0],s=load();
     var lvSeg='<div class="seg fp-seg" role="group" aria-label="Spending in the coming months">'+LEVELS.map(function(x){
       return '<button type="button" data-level="'+x.k+'" aria-pressed="'+(O.level===x.k)+'">'+x.t+'<small>'+x.s+'</small></button>';}).join('')+'</div>';
     var hz='<div class="seg sm" role="group" aria-label="How far ahead"><button type="button" data-hz="6" aria-pressed="'+(O.hz===6)+'">6 months</button><button type="button" data-hz="12" aria-pressed="'+(O.hz===12)+'">12 months</button></div>';
     var opts=function(sel){return M.map(function(m){return '<option value="'+m.ym+'"'+(m.ym===sel?' selected':'')+'>'+m.name+' '+m.year+'</option>';}).join('');};
-    var planRow=function(kind,cls,ph){return function(p,j){
-      return '<div class="fp-row ol-plan '+cls+'" data-plan="'+j+'" data-kind="'+kind+'"><select class="inline ol-m" aria-label="Month">'+opts(p.ym)+'</select>'+
-        '<div class="fp-name"><input class="inline fp-lbl" value="'+esc(p.label||'')+'" placeholder="'+ph+'" aria-label="'+ph+'"></div>'+
-        money(p.amt)+'<button type="button" class="x fp-del" aria-label="Remove">&times;</button></div>';
-    };};
-    var planned=O.planned.map(planRow('planned','','What for')).join('');
-    var inflows=O.inflows.map(planRow('inflows','ol-inflow','From where')).join('');
+    var planned=planRows('planned'),inflows=planRows('inflows');
     return '<section class="pnl ol" id="fp-out"><header class="pnl-h"><span class="pnl-t"><i class="pnl-dot"></i>Savings outlook</span><span class="pnl-m">where Pay myself is heading</span><span class="pnl-tools">'+hz+'<button type="button" class="btn sm ol-fsb" data-olfs="1" aria-label="Open the chart full screen" title="Full screen">⤢</button></span></header><div class="pnl-b">'+
       '<div class="ol-in">'+
         '<div class="fld" data-out="base"><span class="lbl">Base salary</span>'+money(O.base)+'</div>'+
@@ -881,25 +886,20 @@ var Forecast=(function(){
   /* A playground on top of the outlook: levers change everyday habits, pay and one-off buys, and the lab shows
      the outlook's most likely Pay myself next to the same future with those changes. Each lever moves a month's
      saving by a fixed amount, so the tweaked path is the likely path plus the running total of those amounts. */
-  var LAB0={food:0,shop:0,ride:0,sur:0,mama:0,touheed:0,bills:0,ess:0,sal:0,salFrom:0,ones:[]};
+  var LAB0={food:0,shop:0,ride:0,sur:0,mama:0,touheed:0,bills:0,ess:0,sal:0,salFrom:0};
   var LAB_KEYS=['food','shop','ride','sur','mama','touheed','bills','ess'];
   var labS=null,labPrev=null,labAnim=0;
   function labIn(){
     var s=load(),L=Object.assign({},LAB0,s.lab||{});
     // the single one-off buy of the first version becomes the first in the list
-    L.ones=Array.isArray(L.ones)?L.ones.slice():[];
-    if(L.one>0&&L.oneYm&&!L.ones.length) L.ones=[{ym:L.oneYm,label:'',amt:L.one}];
-    delete L.one;delete L.oneYm;
+    // one-off buys from earlier versions of the lab become planned expenses, so the outlook sees them too
+    var old=(Array.isArray(L.ones)?L.ones:[]).concat(L.one>0&&L.oneYm?[{ym:L.oneYm,label:'',amt:L.one}]:[]).filter(function(o){return o&&o.amt>0&&o.ym;});
+    if(old.length||'ones' in (s.lab||{})||'one' in (s.lab||{})){
+      s.planned=(s.planned||[]).concat(old.map(function(o){return {ym:o.ym,label:o.label||'One-off buy',amt:o.amt};}));
+      if(s.lab){delete s.lab.ones;delete s.lab.one;delete s.lab.oneYm;}save();
+    }
+    delete L.ones;delete L.one;delete L.oneYm;
     return L;
-  }
-  function labOnes(){
-    var box=$('#lab-ones');if(!box) return;
-    var L=labIn(),M=months(12);
-    box.innerHTML=L.ones.map(function(o,j){
-      return '<div class="lab-one" data-labone="'+j+'"><select class="inline lab-m lab-om" aria-label="Month">'+M.map(function(m){return '<option value="'+m.ym+'"'+(m.ym===o.ym?' selected':'')+'>'+m.name+' '+m.year+'</option>';}).join('')+'</select>'+
-        '<input class="inline lab-ol" value="'+esc(o.label||'')+'" placeholder="What (phone, trip...)" aria-label="What">'+money(o.amt||null,'lab-oa','Amount')+
-        '<button type="button" class="x lab-odel" aria-label="Remove">&times;</button></div>';
-    }).join('')+'<button type="button" class="btn sm" data-labadd>+ Add a one-off buy</button>';
   }
   function labView(){
     var L=labIn(),M=months(12);
@@ -920,7 +920,9 @@ var Forecast=(function(){
         sl('mama','Groceries (to Mama)','-50','50','5')+sl('touheed','Transport (to Touheed)','-100','50','5')+sl('bills','Bills and subscriptions','-100','50','5')+sl('ess','Laundry and toiletries','-50','50','5')+
         '<div class="lab-h lab-h2">Pay</div>'+
         '<div class="lab-row">'+sl('sal','Pay','-30','50','1')+'<span class="lab-from">from '+mo('salFrom',L.salFrom)+'</span></div>'+
-        '<div class="lab-h lab-h2">One-off buys <small id="lab-ones-t"></small></div><div class="lab-ones" id="lab-ones"></div>'+
+        '<div class="lab-h lab-h2">Planned expenses <small id="lab-pl-t"></small></div><div class="lab-plans">'+planRows('planned')+'<button type="button" class="btn sm" data-add="plan">+ Add planned expense</button></div>'+
+        '<div class="lab-h lab-h2 lab-h-in">Planned money in <small id="lab-in-t"></small></div><div class="lab-plans">'+planRows('inflows')+'<button type="button" class="btn sm" data-add="inflow">+ Add planned money in</button></div>'+
+        '<p class="fc-note">The same lists as in the savings outlook: change one and both move. They are part of both futures, so they shape the lines rather than the gap between them.</p>'+
       '</div><div class="lab-side"><div class="lab-h">Habit price tags <small>tap one to try it</small></div><div class="lab-tags" id="lab-tags"></div>'+
         '<div class="lab-h">Where a month’s pay goes <small id="lab-wf-s"></small></div><div class="lab-waffle" id="lab-wf"></div><div class="legend sm" id="lab-wf-l"></div></div></div>'+
     '</div></section>';
@@ -929,20 +931,19 @@ var Forecast=(function(){
     var L=labIn(),O=S.O,P=S.P,lv=S.lv,rows=S.rows,H=rows.length;
     var ess=P.parts.ess*lv-(O.groomAlt?S.gMonth/2:0);
     var base={food:P.parts.food*lv,shop:shopMean(S.limit),ride:P.parts.ride*lv,sur:S.expSurprise,mama:P.mama,touheed:P.touheed,bills:P.bills,ess:ess};
-    var M=months(12).slice(0,H),pay=O.base,oneBy={};
-    L.ones.forEach(function(o){if(o.amt>0&&o.ym) oneBy[o.ym]=(oneBy[o.ym]||0)+o.amt;});
+    var M=months(12).slice(0,H),pay=O.base;
     var d=M.map(function(m,i){
       var x=-LAB_KEYS.reduce(function(a,k){return a+base[k]*L[k];},0)/100;
       if(i>=L.salFrom) x+=rows[i].salary*L.sal/100;
-      return x-(oneBy[m.ym]||0);
+      return x;
     });
     var bp=S.band.map(function(b){return b.p50;}),tp=[],c=0;
     bp.forEach(function(v,i){c+=d[i];tp.push(v+c);});
     // a typical month after the changes, on base pay (with the pay change once it applies)
     var spend={};LAB_KEYS.forEach(function(k){spend[k]=base[k]*(1+L[k]/100);});
     var salT=pay*(1+L.sal/100);
-    var oneTot=M.reduce(function(a,m){return a+(oneBy[m.ym]||0);},0);
-    return {L:L,S:S,base:base,d:d,bp:bp,tp:tp,M:M,start:S.start.bal,spend:spend,sal:salT,monthly:mean(d),oneBy:oneBy,oneTot:oneTot};
+    var plTot=M.reduce(function(a,m){return a+(S.plan[m.ym]||0);},0),inTot=M.reduce(function(a,m){return a+(S.inflow[m.ym]||0);},0);
+    return {L:L,S:S,base:base,d:d,bp:bp,tp:tp,M:M,start:S.start.bal,spend:spend,sal:salT,monthly:mean(d),plan:S.plan,inflow:S.inflow,plTot:plTot,inTot:inTot};
   }
   function drawLab(S){
     if(S) labS=S;S=labS;var box=$('#lab-chart');if(!box||!S) return;
@@ -981,8 +982,9 @@ var Forecast=(function(){
       if(k<1) labAnim=requestAnimationFrame(frame);};
     labAnim=requestAnimationFrame(frame);
     labTags(X);labWaffle(X);
-    var ob=$('#lab-ones');if(ob&&!ob.children.length) labOnes();
-    var ot=$('#lab-ones-t');if(ot) ot.textContent=X.oneTot?'\u2212'+fmt(X.oneTot)+' in all':'';
+    var pt0=$('#lab-pl-t'),it0=$('#lab-in-t');
+    if(pt0) pt0.textContent=X.plTot?'\u2212'+fmt(X.plTot)+' over '+H+' months':'';
+    if(it0) it0.textContent=X.inTot?'+'+fmt(X.inTot)+' over '+H+' months':'';
   }
   function tweenNum(el,to,f){
     var from=+el.dataset.v||0,t0=performance.now();el.dataset.v=to;cancelAnimationFrame(el._a||0);
@@ -1009,8 +1011,11 @@ var Forecast=(function(){
     var step=Math.max(1,Math.ceil(N*44/iw)),xl='<text class="ol-ax" x="'+x0+'" y="'+(Hh-6)+'" text-anchor="start">Now</text>';
     X.M.forEach(function(m,i){if((i+1)%step&&i!==N-1) return;xl+='<text class="ol-ax" x="'+x(i).toFixed(1)+'" y="'+(Hh-6)+'" text-anchor="'+(i===N-1?'end':'middle')+'">'+esc(m.name)+'</text>';});
     var dots=tp.map(function(v,i){return '<circle class="lab-dot" cx="'+x(i).toFixed(1)+'" cy="'+y(v).toFixed(1)+'" r="'+(i===N-1?4.5:2.5)+'"/>';}).join('')+
-      X.M.map(function(m,i){var a=X.oneBy[m.ym];if(!a) return '';var cx=x(i).toFixed(1);
-        return '<line class="lab-onel" x1="'+cx+'" x2="'+cx+'" y1="'+pt+'" y2="'+(pt+ih)+'"/><text class="lab-onet" x="'+cx+'" y="'+(pt+ih-4)+'" text-anchor="middle">\u2212'+esc(K(a))+'</text>';}).join('');
+      // planned expenses (red) and planned money in (green), as set in the outlook
+      X.M.map(function(m,i){var a=X.plan[m.ym]||0,b=X.inflow[m.ym]||0;if(!a&&!b) return '';var cx=x(i).toFixed(1),o='<line class="lab-onel'+(a?'':' in')+'" x1="'+cx+'" x2="'+cx+'" y1="'+pt+'" y2="'+(pt+ih)+'"/>';
+        if(a) o+='<text class="lab-onet" x="'+cx+'" y="'+(pt+ih-4)+'" text-anchor="middle">\u2212'+esc(K(a))+'</text>';
+        if(b) o+='<text class="lab-onet in" x="'+cx+'" y="'+(pt+ih-(a?17:4))+'" text-anchor="middle">+'+esc(K(b))+'</text>';
+        return o;}).join('');
     box.innerHTML='<svg width="'+W+'" height="'+Hh+'" viewBox="0 0 '+W+' '+Hh+'" role="img" aria-label="Pay myself as things are and with your changes">'+
       '<defs><linearGradient id="lab-g" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--lab-tw)" stop-opacity=".35"/><stop offset="1" stop-color="var(--lab-tw)" stop-opacity="0"/></linearGradient></defs>'+
       g+gl+area+
@@ -1020,9 +1025,10 @@ var Forecast=(function(){
     var hit=$('.lab-hit',box);
     var mv=function(e){var rc=box.getBoundingClientRect(),i=Math.max(0,Math.min(N-1,Math.round((e.clientX-rc.left-pl)/iw*N)-1));
       var dd=tp[i]-X.bp[i];
-      var on=X.L.ones.filter(function(o){return o.ym===X.M[i].ym&&o.amt>0;});
+      var Oi=oInputs(),on=Oi.planned.filter(function(o){return o.ym===X.M[i].ym&&o.amt>0;}).map(function(o){return '<br>Planned: '+esc(o.label||'expense')+' \u2212'+esc(fmt(o.amt));})
+        .concat(Oi.inflows.filter(function(o){return o.ym===X.M[i].ym&&o.amt>0;}).map(function(o){return '<br>Money in: '+esc(o.label||'money in')+' +'+esc(fmt(o.amt));}));
       if(UIref) UIref.showTip('<div class="tt-h">'+esc(X.M[i].name+' '+X.M[i].year)+'</div><div class="tt-b">As things are '+esc(fmt(r100(X.bp[i])))+'<br>With your changes <b>'+esc(fmt(r100(tp[i])))+'</b><br>'+(dd>=0?'+':'\u2212')+esc(fmt(Math.abs(r100(dd))))+
-        on.map(function(o){return '<br>One-off: '+esc(o.label||'buy')+' \u2212'+esc(fmt(o.amt));}).join('')+'</div>',e.clientX,e.clientY);};
+        on.join('')+'</div>',e.clientX,e.clientY);};
     hit.addEventListener('pointermove',mv);hit.addEventListener('pointerdown',mv);
     hit.addEventListener('pointerleave',function(){if(UIref) UIref.hideTip();});
   }
