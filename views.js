@@ -26,8 +26,10 @@
   // ---- UI state, kept per browser ----
   var LSU='ledger.ui';
   var U={fx:false,view:'overview',layers:{prev:true,pace:true,events:true},ex:{type:'tx',scope:'period',q:'',cats:[],modes:[],min:0,sort:'day',dir:-1,sel:null}};
-  try{var u=JSON.parse(localStorage.getItem(LSU)||'null');if(u){U.layers=Object.assign(U.layers,u.layers||{});if(u.ex){U.ex.type=u.ex.type||'tx';U.ex.scope=u.ex.scope||'period';}}}catch(e){}
-  function saveU(){try{localStorage.setItem(LSU,JSON.stringify({layers:U.layers,ex:{type:U.ex.type,scope:U.ex.scope}}));}catch(e){}}
+  // groups: categories joined into one node on the Flows chart, each {id, name, cats}
+  U.groups=[];
+  try{var u=JSON.parse(localStorage.getItem(LSU)||'null');if(u){U.layers=Object.assign(U.layers,u.layers||{});if(u.ex){U.ex.type=u.ex.type||'tx';U.ex.scope=u.ex.scope||'period';}if(Array.isArray(u.groups)) U.groups=u.groups.filter(function(g){return g&&g.id&&Array.isArray(g.cats);});}}catch(e){}
+  function saveU(){try{localStorage.setItem(LSU,JSON.stringify({layers:U.layers,ex:{type:U.ex.type,scope:U.ex.scope},groups:U.groups}));}catch(e){}}
   function viewFromHash(){var m=/^#\/(overview|flows|explorer|forecast)/.exec(location.hash);return m?m[1]:'overview';}
   U.view=viewFromHash();
 
@@ -562,7 +564,7 @@
     var list=Object.keys(items).map(function(k){return items[k];}).sort(function(a,b){return b.v-a.v;});
     var topRows=list.slice(0,12).map(function(e,i){return '<tr data-item="'+esc(itemKey(e.name))+'" tabindex="0"><td class="id">'+String(i+1).padStart(2,'0')+'</td><td>'+esc(e.name)+'</td><td>'+tag(e.cat)+'</td><td class="n">'+e.n+'</td><td class="n">'+esc(fmt(e.v))+'</td></tr>';}).join('');
     return '<div class="grid">'+
-      pnl('p-flow','Money flow',esc(fmt(M.A.spent))+' · account → category → item','<div id="sankey" class="sankey"></div><div class="legend sm">Width is money. Hover a band for its amount; click a category or item to open it in Explorer.</div>',{cls:'s12'})+
+      pnl('p-flow','Money flow',esc(fmt(M.A.spent))+' · account → category → item','<div id="sankey" class="sankey"></div><div id="flow-groups" class="fgroups"></div><div class="legend sm">Width is money. Hover a band for its amount; click a category or item to open it in Explorer. Drag a category onto another to join them into one group, and onto a group to add it.</div>',{cls:'s12'})+
       pnl('p-items','Top items',esc(M.cur.label),topRows?'<div class="tbl-w"><table class="tbl"><thead><tr><th class="id">#</th><th>Item</th><th>Category</th><th class="n">Count</th><th class="n">Total</th></tr></thead><tbody>'+topRows+'</tbody></table></div>':'<div class="empty">Nothing yet.</div>',{cls:'s6'})+
       pnl('p-in','Money in',ins.length?'+'+esc(fmt(-ins.reduce(function(s,t){return s+t.amt;},0))):'',inRows?'<div class="tbl-w"><table class="tbl"><tbody>'+inRows+'</tbody></table></div>':'<div class="empty">Nothing received this '+M.unit+'.</div>',{cls:'s6'})+
       pnl('p-tr','Transfers between accounts',tr.length+' rows',trRows?'<div class="tbl-w"><table class="tbl"><tbody>'+trRows+'</tbody></table></div>':'<div class="empty">No transfers this '+M.unit+'.</div>',{cls:'s6'})+
@@ -577,7 +579,10 @@
     /* each category splits into its own items: up to four (three on a phone) biggest by amount, and the rest of
        that category as one "Other …" item, so every category's money can be followed to what it went on */
     var W0=Math.max(320,el.clientWidth),per=W0<640?3:4,byCat={};
-    tx.forEach(function(t){var cn=catName(t.cat),k=itemKey(t.name),m=byCat[cn]=byCat[cn]||{};m[k]=(m[k]||0)+t.amt;});
+    // a category in a group is drawn as the group's node; its own colour stays on its bands and items
+    var grpOf={};U.groups.forEach(function(g){g.cats.forEach(function(c){grpOf[c]=g;});});
+    var nodeOf=function(cn){var g=grpOf[cn];return g?{id:'g:'+g.id,label:g.name||'Others',g:g}:{id:'c:'+cn,label:cn};};
+    tx.forEach(function(t){var cn=nodeOf(catName(t.cat)).id,k=itemKey(t.name),m=byCat[cn]=byCat[cn]||{};m[k]=(m[k]||0)+t.amt;});
     var keepIn={};
     Object.keys(byCat).forEach(function(cn){
       var ks=Object.keys(byCat[cn]).sort(function(a,b){return byCat[cn][b]-byCat[cn][a];});
@@ -585,11 +590,11 @@
       keepIn[cn]=ks.length<=per+1?ks:ks.slice(0,per);
     });
     tx.forEach(function(t){
-      var a='a:'+t.mode,cn=catName(t.cat),c='c:'+cn,k=itemKey(t.name),kept=keepIn[cn].indexOf(k)>=0,i=kept?'i:'+cn+'|'+k:'i:~'+cn;
+      var a='a:'+t.mode,cn=catName(t.cat),N=nodeOf(cn),c=N.id,k=itemKey(t.name),kept=keepIn[c].indexOf(k)>=0,i=kept?'i:'+c+'|'+k:'i:~'+c;
       acc[a]=acc[a]||{id:a,label:t.mode,v:0,kind:'acct'};acc[a].v+=t.amt;
-      cat[c]=cat[c]||{id:c,label:cn,v:0,kind:'cat',cls:cls(cn)};cat[c].v+=t.amt;
-      it[i]=it[i]||{id:i,label:kept?t.name.trim():'Other '+cn.toLowerCase(),v:0,kind:'item',key:kept?k:null,cat:c,other:!kept,cls:cls(cn)};it[i].v+=t.amt;
-      var k1=a+'|'+c,k2=c+'|'+i;
+      cat[c]=cat[c]||{id:c,label:N.label,v:0,kind:'cat',cls:N.g?'grp':cls(cn),g:N.g||null,parts:{}};cat[c].v+=t.amt;cat[c].parts[cn]=(cat[c].parts[cn]||0)+t.amt;
+      it[i]=it[i]||{id:i,label:kept?t.name.trim():'Other '+N.label.toLowerCase(),v:0,kind:'item',key:kept?k:null,cat:c,other:!kept,cls:cls(cn)};it[i].v+=t.amt;
+      var k1=a+'|'+c+'|'+cn,k2=c+'|'+i;
       l1[k1]=l1[k1]||{s:a,t:c,v:0,cls:cls(cn)};l1[k1].v+=t.amt;
       l2[k2]=l2[k2]||{s:c,t:i,v:0,cls:cls(cn)};l2[k2].v+=t.amt;
     });
@@ -621,8 +626,8 @@
     });
     cols3.forEach(function(L){L.forEach(function(l){
       var n=l.n,id=l.id;
-      var attr=n.kind==='cat'?' data-cat-filter="'+esc(n.label)+'"':n.kind==='item'&&n.key?' data-item="'+esc(n.key)+'"':'';
-      var tip=' data-tip="'+esc(n.label+'\n'+fmt(n.v)+' · '+pct(n.v,M.A.spent)+'%')+'"';
+      var attr=n.kind==='cat'?(n.g?' data-cats-filter="'+esc(n.g.cats.join('|'))+'"':' data-cat-filter="'+esc(n.label)+'"')+' data-drag="'+esc(id)+'"':n.kind==='item'&&n.key?' data-item="'+esc(n.key)+'"':'';
+      var tip=' data-tip="'+esc(n.label+'\n'+fmt(n.v)+' · '+pct(n.v,M.A.spent)+'%'+(n.g?'\n'+Object.keys(n.parts).sort(function(a,b){return n.parts[b]-n.parts[a];}).map(function(c){return c+' '+fmt(n.parts[c]);}).join('\n'):''))+'"';
       nodesH+='<g class="nd nd-'+n.kind+'" data-node="'+esc(id)+'"'+attr+tip+'><rect class="nd-r '+(n.cls||'acct')+'" x="'+Viz.r1(n.x)+'" y="'+Viz.r1(n.y)+'" width="'+n.w+'" height="'+Viz.r1(n.h)+'" rx="1.5"/></g>';
       var left=n.col===0,ex=left?n.x:n.x+n.w,lx=left?n.x-14:n.x+n.w+14,ty=l.y;
       var label=narrow&&n.label.length>10?n.label.slice(0,9)+'…':n.label;
@@ -633,6 +638,8 @@
     });});
     s+=nodesH+labsH;
     el.innerHTML=s+'</g></svg>';
+    flowGroups();
+    flowDrag(el,lay,labW);
     // highlight a node's bands on hover
     $$('.nd',el).forEach(function(g){
       g.addEventListener('pointerenter',function(){
@@ -643,6 +650,87 @@
       g.addEventListener('pointerleave',function(){el.classList.remove('focus');$$('.lk.hot',el).forEach(function(p){p.classList.remove('hot');});});
     });
   }
+
+  // ---- joining categories on the Flows chart ----
+  function catsOf(id){
+    if(id.indexOf('g:')===0){var g=U.groups.filter(function(x){return 'g:'+x.id===id;})[0];return g?g.cats.slice():[];}
+    return [id.slice(2)];
+  }
+  function joinNodes(src,dst){
+    var add=catsOf(src),into=dst.indexOf('g:')===0?dst:src.indexOf('g:')===0?src:null,other=into===dst?src:dst;
+    if(into){
+      var g=U.groups.filter(function(x){return 'g:'+x.id===into;})[0];
+      catsOf(other).forEach(function(c){if(g.cats.indexOf(c)<0) g.cats.push(c);});
+      if(other.indexOf('g:')===0) U.groups=U.groups.filter(function(x){return 'g:'+x.id!==other;});
+    }else{
+      var name=window.prompt('Name this group of '+catsOf(dst).concat(add).join(' and '),'Others');
+      if(name===null) return false;
+      U.groups.push({id:Date.now().toString(36),name:name.trim()||'Others',cats:catsOf(dst).concat(add)});
+    }
+    saveU();return true;
+  }
+  function flowGroups(){
+    var box=$('#flow-groups');if(!box) return;
+    if(!U.groups.length){box.innerHTML='';return;}
+    var tot={};M.A.top.forEach(function(t){if(t.amt>0){var c=catName(t.cat);tot[c]=(tot[c]||0)+t.amt;}});
+    box.innerHTML=U.groups.map(function(g){
+      var sum=g.cats.reduce(function(a,c){return a+(tot[c]||0);},0);
+      return '<div class="fgroup" data-grp="'+esc(g.id)+'"><input class="inline fg-name" value="'+esc(g.name)+'" aria-label="Group name"><b class="fg-tot">'+esc(fmt(sum))+'</b>'+
+        g.cats.map(function(c){return '<span class="fg-cat">'+tag(c)+' '+esc(K(tot[c]||0))+'<button type="button" class="x" data-grp-out="'+esc(c)+'" aria-label="Take '+esc(c)+' out">&times;</button></span>';}).join('')+
+        '<button type="button" class="btn sm" data-grp-del>Ungroup</button></div>';
+    }).join('');
+    $$('.fgroup',box).forEach(function(row){
+      var g=U.groups.filter(function(x){return x.id===row.getAttribute('data-grp');})[0];
+      $('.fg-name',row).addEventListener('change',function(){g.name=this.value.trim()||'Others';saveU();drawSankey();});
+      row.addEventListener('click',function(e){
+        var b=e.target.closest('button');if(!b) return;
+        if(b.hasAttribute('data-grp-del')) U.groups=U.groups.filter(function(x){return x!==g;});
+        else{g.cats=g.cats.filter(function(c){return c!==b.getAttribute('data-grp-out');});if(g.cats.length<2) U.groups=U.groups.filter(function(x){return x!==g;});}
+        saveU();drawSankey();
+      });
+    });
+  }
+  // drag a category (or group) node onto another in the category column to join them
+  function flowDrag(el,lay,labW){
+    var svg=$('svg',el);if(!svg) return;
+    var cats=Object.keys(lay.nodes).map(function(k){return lay.nodes[k];}).filter(function(n){return n.col===1;});
+    var at=function(e){var p=svg.createSVGPoint();p.x=e.clientX;p.y=e.clientY;p=p.matrixTransform(svg.getScreenCTM().inverse());return {x:p.x-labW,y:p.y};};
+    var drag=null,block=false;
+    // the chart is redrawn into the same element, so the previous draw's listeners are taken off first
+    if(el._fd){el.removeEventListener('click',el._fd.click,true);el.removeEventListener('pointerdown',el._fd.down);}
+    var onClick=function(e){if(block){e.stopPropagation();e.preventDefault();block=false;}};
+    el.addEventListener('click',onClick,true);
+    $$('[data-drag]',el).forEach(function(g){
+      g.addEventListener('pointerdown',function(e){
+        if(e.button>0) return;
+        drag={id:g.getAttribute('data-drag'),p0:at(e),on:false,tgt:null};
+        e.preventDefault();
+      });
+    });
+    var move=function(e){
+      if(!drag) return;
+      var p=at(e),dx=p.x-drag.p0.x,dy=p.y-drag.p0.y;
+      if(!drag.on&&Math.abs(dx)+Math.abs(dy)<6) return;
+      drag.on=true;el.classList.add("dragging");hideTip();
+      $$('[data-node="'+cssq(drag.id)+'"]',el).forEach(function(n){n.setAttribute('transform','translate('+dx.toFixed(1)+','+dy.toFixed(1)+')');n.classList.add('lifted');});
+      var t=cats.filter(function(n){return n.id!==drag.id&&p.y>=n.y-14&&p.y<=n.y+n.h+14&&p.x>n.x-90&&p.x<n.x+160;})[0];
+      var id=t?t.id:null;
+      if(id!==drag.tgt){$$('.nd.drop',el).forEach(function(n){n.classList.remove('drop');});if(id) $$('[data-node="'+cssq(id)+'"]',el).forEach(function(n){n.classList.add('drop');});drag.tgt=id;}
+    };
+    var up=function(){
+      if(!drag) return;
+      var d=drag;drag=null;el.classList.remove('dragging');
+      window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',up);
+      if(!d.on) return;
+      block=true;setTimeout(function(){block=false;},400);
+      if(d.tgt&&joinNodes(d.id,d.tgt)){drawSankey();return;}
+      drawSankey();
+    };
+    var onDown=function(e){if(e.target.closest('[data-drag]')){window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);}};
+    el.addEventListener('pointerdown',onDown);
+    el._fd={click:onClick,down:onDown};
+  }
+  function cssq(s){return String(s).replace(/["\\]/g,'\\$&');}
 
   // =====================================================================
   // explorer
@@ -902,6 +990,7 @@
     if((b=t.closest('[data-cmd]'))){cmdGo(+b.getAttribute('data-cmd'));return;}
     if(t.closest('[data-open-bal]')) return; // editor.js
     if((b=t.closest('[data-cat-filter]'))){filterCat(b.getAttribute('data-cat-filter'));return;}
+    if((b=t.closest('[data-cats-filter]'))){U.ex.cats=b.getAttribute('data-cats-filter').split('|');U.ex.sel=null;go('explorer');return;}
     if((b=t.closest('[data-tx]'))){openObj('t:'+b.getAttribute('data-tx'));return;}
     if((b=t.closest('[data-item]'))){openObj('i:'+b.getAttribute('data-item'));return;}
     if(t.closest('[data-insp-close]')){U.ex.sel=null;exTable();return;}
