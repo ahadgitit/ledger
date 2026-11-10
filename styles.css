@@ -926,3 +926,7 @@ html.ol-fs-open,html.ol-fs-open body{overflow:hidden}
 .ol-rot{display:none}
 @media (orientation:portrait) and (max-width:600px){.ol-rot{display:inline}}
 .fp-spent{font-weight:600;color:var(--ink)}
+.nd-lead{fill:none;stroke:var(--cn);stroke-width:1;opacity:.9}
+.nd-lead.acct{stroke:var(--ink-2)}
+.nd-lead.c1{stroke:var(--c1)}.nd-lead.c2{stroke:var(--c2)}.nd-lead.c3{stroke:var(--c3)}.nd-lead.c4{stroke:var(--c4)}.nd-lead.c5{stroke:var(--c5)}.nd-lead.c6{stroke:var(--c6)}.nd-lead.c7{stroke:var(--c7)}.nd-lead.c8{stroke:var(--c8)}
+.sankey .nd-t,.sankey .nd-v{paint-order:stroke;stroke:var(--panel);stroke-width:3px;stroke-linejoin:round}

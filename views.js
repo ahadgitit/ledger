@@ -603,21 +603,29 @@
     lay.links.forEach(function(l,i){
       s+='<path class="lk '+l.cls+'" d="'+l.d+'" data-s="'+esc(l.s)+'" data-t="'+esc(l.t)+'" data-tip="'+esc(l.sn.label+' → '+l.tn.label+'\n'+fmt(l.v)+' · '+pct(l.v,M.A.spent)+'% of spent')+'"/>';
     });
-    var lastY=[-1e9,-1e9,-1e9];
-    Object.keys(lay.nodes).forEach(function(id){
-      var n=lay.nodes[id];
-      var attr=n.kind==='cat'?' data-cat-filter="'+esc(n.label)+'"':n.kind==='item'&&n.key?' data-item="'+esc(n.key)+'"':'';
-      s+='<g class="nd nd-'+n.kind+'" data-node="'+esc(id)+'"'+attr+' data-tip="'+esc(n.label+'\n'+fmt(n.v)+' · '+pct(n.v,M.A.spent)+'%')+'">';
-      s+='<rect class="nd-r '+(n.cls||'acct')+'" x="'+Viz.r1(n.x)+'" y="'+Viz.r1(n.y)+'" width="'+n.w+'" height="'+Viz.r1(n.h)+'" rx="1.5"/>';
-      var right=n.col===2,ty=n.y+n.h/2;
-      var lx=n.col===0?n.x-8:right?n.x+n.w+8:n.x+n.w+6;
-      var anchor=n.col===0?'end':'start';
-      var label=narrow&&n.label.length>10?n.label.slice(0,9)+'…':n.label;
-      var room=ty-lastY[n.col]>=24;
-      if(room) lastY[n.col]=ty;
-      if(room) s+='<text class="nd-t" x="'+Viz.r1(lx)+'" y="'+Viz.r1(ty-1)+'" text-anchor="'+anchor+'">'+esc(label)+'</text><text class="nd-v" x="'+Viz.r1(lx)+'" y="'+Viz.r1(ty+11)+'" text-anchor="'+anchor+'">'+esc(K(n.v))+'</text>';
-      s+='</g>';
+    // every node gets its label: in a crowded column labels are pushed apart (24px each) and a thin line in the
+    // node's colour joins a moved label back to its bar, so no number sits beside someone else's bar
+    var GAP=24,cols3=[[],[],[]],nodesH='',labsH='';
+    Object.keys(lay.nodes).forEach(function(id){var n=lay.nodes[id];cols3[n.col].push({id:id,n:n,want:n.y+n.h/2});});
+    cols3.forEach(function(L){
+      L.sort(function(a,b){return a.want-b.want;});
+      L.forEach(function(l,i){l.y=Math.max(l.want,i?L[i-1].y+GAP:GAP/2);});
+      for(var i=L.length-1;i>=0;i--) L[i].y=Math.min(L[i].y,i<L.length-1?L[i+1].y-GAP:H+6-GAP/2);
+      L.forEach(function(l,i){if(i) l.y=Math.max(l.y,L[i-1].y+GAP);});
     });
+    cols3.forEach(function(L){L.forEach(function(l){
+      var n=l.n,id=l.id;
+      var attr=n.kind==='cat'?' data-cat-filter="'+esc(n.label)+'"':n.kind==='item'&&n.key?' data-item="'+esc(n.key)+'"':'';
+      var tip=' data-tip="'+esc(n.label+'\n'+fmt(n.v)+' · '+pct(n.v,M.A.spent)+'%')+'"';
+      nodesH+='<g class="nd nd-'+n.kind+'" data-node="'+esc(id)+'"'+attr+tip+'><rect class="nd-r '+(n.cls||'acct')+'" x="'+Viz.r1(n.x)+'" y="'+Viz.r1(n.y)+'" width="'+n.w+'" height="'+Viz.r1(n.h)+'" rx="1.5"/></g>';
+      var left=n.col===0,ex=left?n.x:n.x+n.w,lx=left?n.x-14:n.x+n.w+14,ty=l.y;
+      var label=narrow&&n.label.length>10?n.label.slice(0,9)+'…':n.label;
+      var lead=Math.abs(ty-l.want)>3
+        ?'<path class="nd-lead '+(n.cls||'acct')+'" d="M'+Viz.r1(ex)+','+Viz.r1(l.want)+' L'+Viz.r1(left?ex-6:ex+6)+','+Viz.r1(l.want)+' L'+Viz.r1(left?lx+3:lx-3)+','+Viz.r1(ty)+'"/>'
+        :'<path class="nd-lead '+(n.cls||'acct')+'" d="M'+Viz.r1(ex)+','+Viz.r1(ty)+' L'+Viz.r1(left?lx+3:lx-3)+','+Viz.r1(ty)+'"/>';
+      labsH+='<g class="nd nd-'+n.kind+'" data-node="'+esc(id)+'"'+attr+tip+'>'+lead+'<text class="nd-t" x="'+Viz.r1(lx)+'" y="'+Viz.r1(ty-1)+'" text-anchor="'+(left?'end':'start')+'">'+esc(label)+'</text><text class="nd-v" x="'+Viz.r1(lx)+'" y="'+Viz.r1(ty+11)+'" text-anchor="'+(left?'end':'start')+'">'+esc(K(n.v))+'</text></g>';
+    });});
+    s+=nodesH+labsH;
     el.innerHTML=s+'</g></svg>';
     // highlight a node's bands on hover
     $$('.nd',el).forEach(function(g){
