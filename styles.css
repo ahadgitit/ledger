@@ -1034,3 +1034,7 @@ html.ol-fs-open,html.ol-fs-open body{overflow:hidden}
 @media (max-width:560px){.jar-g{height:150px}.lab-jars{gap:5px}.jar-v{font-size:10px}}
 @media (prefers-reduced-motion:reduce){.jar-f,.jar-gh{transition:none}}
 @media (min-width:761px){.lab-side{position:sticky;top:104px;align-self:start}}
+/* dialogs never scroll sideways (a focused field cannot shift the content), and the big amount box fits its row */
+.sheet-b{overflow-x:clip}
+.sheet-b .fld,.sheet-b .amt{min-width:0}
+.amt input{width:100%}
