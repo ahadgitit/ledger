@@ -1038,3 +1038,13 @@ html.ol-fs-open,html.ol-fs-open body{overflow:hidden}
 .sheet-b{overflow-x:clip}
 .sheet-b .fld,.sheet-b .amt{min-width:0}
 .amt input{width:100%}
+
+/* balances dialog: month start and the offset */
+.bal-start{display:grid;gap:10px}
+.bal-off{display:grid;gap:8px;justify-items:start}
+.bal-off-r{display:flex;align-items:baseline;gap:10px;font-size:12.5px;color:var(--ink-2)}
+.bal-off-r b{font:600 15px var(--font-num);color:var(--critical)}
+.bal-off-r i{font-style:normal;color:var(--muted)}
+.bal-off-r b:last-child{color:var(--ink)}
+.bal-off-r.ok b:last-child{color:var(--good)}
+.bal-off small.ok{color:var(--good);font-size:12px}

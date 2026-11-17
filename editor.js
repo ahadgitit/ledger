@@ -60,12 +60,15 @@
     var hs=headings(rows);
     return hs.map(function(h,k){
       var end=k+1<hs.length?hs[k+1]-1:rows.length-1;
-      var acc={},order=[];
+      var acc={},order=[],g={};
       for(var i=h;i<end;i++){
-        var key=ACCT[cell(rows[i],6).toLowerCase()];
+        var lbl=cell(rows[i],6).toLowerCase(),key=ACCT[lbl];
         if(key&&!acc[key]){acc[key]={name:key,label:i+1,row:i+2,value:numOr0(cell(rows[i+1],6)),raw:cell(rows[i+1],6)};order.push(key);}
+        // the other labelled cells of the block, each with its value in the cell below
+        var gk={'spent':'spent','month start:':'start','month start':'start','total':'total','total - savings':'tms','total-savings':'tms'}[lbl];
+        if(gk&&!g[gk]) g[gk]={row:i+2,value:numOr0(cell(rows[i+1],6))};
       }
-      return {name:cell(rows[h],0),head:h+1,acc:acc,order:order};
+      return {name:cell(rows[h],0),head:h+1,acc:acc,order:order,g:g};
     }).filter(function(b){return b.order.length;});
   }
   function memory(){
@@ -461,11 +464,28 @@
         '<span class="acct-in"><i>Rs</i><input data-acct="'+esc(k)+'" inputmode="decimal" autocomplete="off" placeholder="'+esc(group(a.value))+'" value="'+esc(v)+'"></span>'+
         '<span class="acct-d" data-delta="'+esc(k)+'"></span></label>';
     }).join('');
+    var st=b.g.start,sv=B.vals.__start!=null?B.vals.__start:'';
+    var startCard=st?'<div class="bal-start"><label class="acct"><span class="acct-n">Month start</span>'+
+        '<span class="acct-now">Now '+esc(fmt(st.value))+'</span>'+
+        '<span class="acct-in"><i>Rs</i><input data-start inputmode="decimal" autocomplete="off" placeholder="'+esc(group(st.value))+'" value="'+esc(sv)+'"></span>'+
+        '<span class="acct-d" id="bal-start-d"></span></label>'+
+        '<div class="bal-off" id="bal-off"></div></div>':'';
     body.innerHTML='<div class="fld"><span class="lbl">Month</span><div class="picks">'+chips+'</div></div>'+
       '<p class="hint">Type what each account really holds now. Leave a box empty to keep it as it is. Only the cells under the labels in column G change; the sheet’s Total and Remaining formulas update from them.</p>'+
-      '<div class="accts">'+cards+'</div><div class="bal-total" id="bal-total"></div>';
+      '<div class="accts">'+cards+'</div><div class="bal-total" id="bal-total"></div>'+
+      (st?'<div class="fld"><span class="lbl">Start of the month</span><p class="hint">What you had on payday, before any of '+esc(b.name)+'’s entries. If you typed balances after already spending some of it, the month start is too low by what those entries took, and the offset shows it.</p>'+startCard+'</div>':'');
     drawBalTotals();
   }
+  // offset = (Total − savings) − (month start − Spent); savings as the sheet has them (Total − "Total - savings")
+  function offsetOf(b,total,start){
+    var g=b.g;if(!g.total||!g.tms||!g.spent) return null;
+    var saved=g.total.value-g.tms.value;
+    return (total-saved)-(start-g.spent.value);
+  }
+  function totalAfter(b){
+    return b.order.reduce(function(t,k){var raw=B.vals[k],n=raw!=null&&String(raw).trim()!==''?Logic.num(raw):NaN;return t+(isNaN(n)?b.acc[k].value:n);},0);
+  }
+  function startAfter(b){var raw=B.vals.__start,n=raw!=null&&String(raw).trim()!==''?Logic.num(raw):NaN;return isNaN(n)?b.g.start.value:n;}
   function changes(b){
     var out=[];
     b.order.forEach(function(k){
@@ -476,6 +496,10 @@
       if(Math.abs(n-b.acc[k].value)<0.001) return;
       out.push({k:k,acc:b.acc[k],n:n});
     });
+    if(b.g.start){
+      var raw=B.vals.__start;
+      if(raw!=null&&String(raw).trim()!==''){var n=Logic.num(raw);if(!isNaN(n)&&Math.abs(n-b.g.start.value)>=0.001) out.push({k:'Month start',acc:{row:b.g.start.row,value:b.g.start.value},n:n,start:true});}
+    }
     return out;
   }
   function drawBalTotals(){
@@ -491,12 +515,24 @@
       if(isNaN(n)||Math.abs(n-a.value)<0.001){d.textContent=raw&&isNaN(n)?'Not a number':'No change';d.className='acct-d'+(raw&&isNaN(n)?' bad':'');}
       else{var df=n-a.value;d.textContent=(df>0?'+':'−')+fmt(Math.abs(df)).replace('Rs ','Rs ');d.className='acct-d '+(df>0?'up':'down');}
     });
+    // the month start: its change, and the offset now and after the changes typed
+    if(b.g.start){
+      var sa=startAfter(b),sd=$('#bal-start-d'),raw=B.vals.__start,bad=raw&&isNaN(Logic.num(raw));
+      if(sd){if(bad){sd.textContent='Not a number';sd.className='acct-d bad';}else if(Math.abs(sa-b.g.start.value)<0.001){sd.textContent='No change';sd.className='acct-d';}else{var dd=sa-b.g.start.value;sd.textContent=(dd>0?'+':'−')+fmt(Math.abs(dd));sd.className='acct-d '+(dd>0?'up':'down');}}
+      var o0=offsetOf(b,before,b.g.start.value),o1=offsetOf(b,after,sa),ob=$('#bal-off');
+      if(ob&&o0!=null){
+        var fix=Math.round(sa+o1),ok=Math.abs(o1)<1;
+        ob.innerHTML='<div class="bal-off-r'+(ok?' ok':'')+'"><span>Offset</span><b>'+esc(offTxt(o0))+'</b>'+(Math.abs(o1-o0)>=1?'<i>→</i><b>'+esc(offTxt(o1))+'</b>':'')+'</div>'+
+          (ok?'<small class="ok">In sync: the accounts match the entries.</small>':'<button type="button" class="btn sm" data-fix-start="'+fix+'">Set month start to '+esc(fmt(fix))+' so the offset is 0</button>');
+      }
+    }
     var ch=changes(b);
     $('#bal-total').innerHTML='<span>Total across these accounts</span><b>'+esc(fmt(after))+'</b>'+(Math.abs(after-before)>0.5?'<small>was '+esc(fmt(before))+'</small>':'');
     $('#bal-save').disabled=!ch.length||balSaving;
-    $('#bal-hint').textContent=ch.length?ch.length+(ch.length===1?' balance':' balances')+' to update in '+b.name+'.':'';
+    $('#bal-hint').textContent=ch.length?ch.length+(ch.length===1?' change':' changes')+' to save in '+b.name+'.':'';
     $('#bal-hint').classList.remove('bad');
   }
+  function offTxt(o){return Math.abs(o)<1?'0':(o>0?'+':'−')+fmt(Math.abs(o));}
   var balSaving=false;
   function saveBal(){
     var b=curBlock();
@@ -509,7 +545,7 @@
       // Check the labels are still where they were before touching anything.
       var nb=blocks(rows).filter(function(x){return x.name===b.name&&x.head===b.head;})[0];
       ch.forEach(function(c){
-        var a=nb&&nb.acc[c.k];
+        var a=nb&&(c.start?nb.g.start:nb.acc[c.k]);
         if(!a||a.row!==c.acc.row) throw Object.assign(new Error('The '+c.k+' row in '+b.name+' moved in the sheet. Close this and try again.'),{code:'layout'});
       });
       return Promise.all(ch.map(function(c){return L.get('Tracking!G'+c.acc.row,'FORMULA');}));
@@ -523,14 +559,14 @@
         var v=(back[i][0]||[])[0];
         if(Math.abs(+v-c.n)>0.001) throw Object.assign(new Error(c.k+' did not read back as '+fmt(c.n)+'. Check G'+c.acc.row+' in the sheet.'),{code:'verify'});
       });
-      balSaving=false;setBusy('#bal-save',false,'Save balances');
+      balSaving=false;setBusy('#bal-save',false,'Save');
       $('#bal-dlg').close();
       L.refresh();
       toast('Updated '+ch.map(function(c){return c.k+' to '+fmt(c.n);}).join(', ')+' for '+b.name+'.',[{label:'Undo',run:function(){
         needToken().then(function(){return L.batch(originals,'USER_ENTERED');}).then(function(){L.refresh();toast('Balances put back.');}).catch(function(e){toast(fail(e));});
       }}]);
     }).catch(function(e){
-      balSaving=false;setBusy('#bal-save',false,'Save balances');
+      balSaving=false;setBusy('#bal-save',false,'Save');
       $('#bal-hint').textContent=e&&(e.code==='layout'||e.code==='verify')?e.message:fail(e);
       $('#bal-hint').classList.add('bad');
     });
@@ -729,6 +765,8 @@
     if(inBal){
       if(t.hasAttribute('data-month')){B.sel=t.getAttribute('data-month');B.vals={};drawBal();return;}
       if(t.id==='bal-save') return saveBal();
+      var fx=t.closest&&t.closest('[data-fix-start]');
+      if(fx){var v=fx.getAttribute('data-fix-start'),inp=$('#bal-body input[data-start]');B.vals.__start=v;if(inp) inp.value=(+v).toLocaleString('en-US');drawBalTotals();return;}
     }
   });
   document.addEventListener('input',function(e){
@@ -746,6 +784,7 @@
     else if(t.id==='f-adjust'){F.adjust=t.checked;drawReceipt();}
     else if(t.id==='f-date'){F.date=t.value;$$('[data-date]').forEach(function(b){b.setAttribute('aria-pressed',String(b.getAttribute('data-date')===F.date));});drawReceipt();}
     else if(t.hasAttribute&&t.hasAttribute('data-acct')){B.vals[t.getAttribute('data-acct')]=t.value;drawBalTotals();}
+    else if(t.hasAttribute&&t.hasAttribute('data-start')){B.vals.__start=t.value;drawBalTotals();}
     else if(t.closest&&t.closest('#cyc-dlg')&&C){
       if(t.id==='c-month') C.month=t.value;
       else if(t.id==='c-date') C.date=t.value;

@@ -142,7 +142,7 @@
     if(bal&&bal.remaining<0) out.push({lv:'critical',t:'Cycle overspent by '+fmt(-bal.remaining),d:M.cur.name+' started with '+(bal.start!=null?fmt(bal.start):'its month start')+'. Remaining in column G is below zero.'});
     if(M.bal&&M.bal.offset!=null){
       var off=M.bal.offset;
-      if(Math.abs(off)>=1) out.push({lv:'serious',t:'Accounts off by '+fmt(Math.abs(off)),d:off>0?'Accounts hold more than the entries explain. A balance was probably not lowered after logging.':'Accounts hold less than the entries say. An expense is probably missing.',act:'<button type="button" class="lnk" data-open-bal="'+esc(M.balSrc.name)+'">Reconcile →</button>'});
+      if(Math.abs(off)>=1) out.push({lv:'serious',t:'Accounts off by '+fmt(Math.abs(off)),d:off>0?'Accounts hold more than the entries explain. A balance was probably not lowered after logging, or the month start was typed after some of this month’s entries were already spent.':'Accounts hold less than the entries say. An expense is probably missing.',act:'<button type="button" class="lnk" data-open-bal="'+esc(M.balSrc.name)+'">Reconcile →</button>'});
       else out.push({lv:'good',t:'Accounts reconciled',d:'ABL, Sadapay and Cash match the logged entries for '+M.balSrc.name+'.'});
     }
     var due=M.sub.rows.filter(function(r){return r.status==='due';});
