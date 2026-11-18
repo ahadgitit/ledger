@@ -1053,3 +1053,19 @@ html.ol-fs-open,html.ol-fs-open body{overflow:hidden}
 .fp-toprow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:stretch}
 .fp-toprow>.pnl{margin:0;min-width:0}
 @media (max-width:980px){.fp-toprow{grid-template-columns:minmax(0,1fr)}}
+
+/* money in, out and saved: what came in that month */
+.cf-in{display:grid;grid-template-columns:minmax(0,1.3fr) auto minmax(0,1fr) auto minmax(0,1fr);gap:12px;align-items:stretch;margin-top:8px}
+.cf-in-t{display:grid;gap:5px;align-content:start;padding:12px 14px;border:1px solid var(--line-2);border-radius:var(--r);background:var(--raise);min-width:0}
+.cf-in-t>span{display:flex;align-items:center;gap:6px;font:600 10.5px var(--font-ui);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.cf-in-t b{font:700 24px/1.15 var(--font-num);color:var(--ink)}
+.cf-in-t b.neg{color:var(--critical)}.cf-in-t b.cf-na{font-size:16px;color:var(--muted)}
+.cf-in-t small{font-size:11.5px;color:var(--ink-2);line-height:1.4}
+.cf-in-t.cf-tot{background:transparent;border-style:dashed}
+.cf-in-t .cf-edit{display:flex;gap:8px;align-items:center}
+.cf-in-t .cf-edit .fp-in{flex:1;min-width:0}
+.cf-in-t .cf-edit input{font:700 20px var(--font-num)}
+.cf-in-p{align-self:center;font:600 20px var(--font-num);color:var(--muted)}
+.cf-in-bar{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--raise);margin-top:12px}
+.cf-in-bar i{height:100%}.cf-in-bar i.p{background:var(--ink-2)}.cf-in-bar i.c{background:var(--cn);background-image:repeating-linear-gradient(45deg,transparent 0 4px,rgba(255,255,255,.12) 4px 8px)}
+@media (max-width:760px){.cf-in{grid-template-columns:minmax(0,1fr)}.cf-in-p{display:none}}
