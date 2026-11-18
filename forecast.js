@@ -19,6 +19,7 @@ var Forecast=(function(){
   var KEY='ledger.forecast.v3';
   var PEOPLE=[{key:'touheed',label:'Touheed',what:'transport fee',fee:27000},{key:'mama',label:'Mama',what:'groceries',fee:35000}];
   var RIDE_HALF=60,RIDE_DISP=0.5,RIDE_SIMS=4000;
+  var FOOD_MIN_DAY=350;
   var ESS=[
     {k:'laundry',t:'Laundry',cat:'laundry',re:/laund|laubdry|dry ?clean/},
     {k:'groom',t:'Grooming and toiletries',cat:'toiletries',re:/razor|blade|gill?ett?e|gellete|shav|groom|deod|shampoo|haircut|body ?wash|tooth|oral ?max/}
@@ -441,12 +442,14 @@ var Forecast=(function(){
       lead='Enter how much you will allow yourself for '+capWhat+' until '+fmtDay(R.lastDay)+', and this works out what is left for '+what+'.';
     }else{
       var pd=food?C.dayLimit:C.left/d;
-      lv=C.left<=0?'critical':pd>=usual?'good':pd>=usual*0.6?'warning':'critical';
+      // predicting food: under Rs 350 a day is too little, whatever your usual
+      lv=C.left<=0||(food&&pd<FOOD_MIN_DAY)?'critical':pd>=usual?'good':pd>=usual*0.6?'warning':'critical';
       word=C.left<=0?'Pay myself will be touched':lv==='good'?'Pay myself stays untouched':lv==='warning'?'Tight, but doable':'Too little left for '+what;
       k=C.left<=0?'Short by':'You can spend on '+what+' until '+fmtDay(R.lastDay);
       big=Math.abs(C.left);per=C.left>0?fmt(pd)+' a day':'nothing left for '+what;
       lead=C.left<=0
         ?'Your bills, essentials, InDrive and '+capWhat+' cap already come to '+fmt(-C.left)+' more than you have. That, and any '+what+', would come out of Pay myself, so lower Pay myself from '+fmt(C.kept)+' to '+fmt(C.rec)+' (recommended), or lower a cap or an estimate to make room.'
+        :food&&pd<FOOD_MIN_DAY?'That leaves '+fmt(pd)+' a day for food, under the '+fmt(FOOD_MIN_DAY)+' a day you need to eat. Lower your shopping cap or an estimate to make room'+(C.rec!==C.kept?', or lower Pay myself to '+fmt(C.rec)+' (recommended) and eat as usual.':'.')
         :lv==='good'?'Keep '+what+' under '+fmt(C.left)+' ('+fmt(pd)+' a day) and stick to your '+capWhat+' cap, and Pay myself stays untouched. You usually spend about '+fmt(usual)+' a day on '+what+'.'
         :'That is '+fmt(pd)+' a day for '+what+', less than the '+fmt(usual)+' a day you usually spend. Stay under it, or lower your '+capWhat+' cap, to keep Pay myself untouched'+(C.rec!==C.kept?'. If you eat as usual, lower Pay myself to '+fmt(C.rec)+' (recommended).':'.');
     }
