@@ -159,6 +159,7 @@ var Forecast=(function(){
     });
     for(var dd=cur.start;dd<=today;dd++) soFar+=fd[dd]||0;
     var food={byDay:fd,items:fi,logged:logged,today:fd[today]||0,soFar:soFar,passed:Math.max(0,today-cur.start),now:today};
+    food.cycles=cyc.slice(0,i).map(function(c,j){var end=cyc[j+1].start-1,f=0;for(var d0=c.start;d0<=end;d0++) f+=fd[d0]||0;return {key:String(c.start),name:c.name,start:c.start,end:end,food:f};}).filter(function(c){return c.food>0;}).reverse();
     /* InDrive from now to the day before payday. Rides already taken are out of Remaining;
        when today already has a ride logged, today counts as done and the estimate starts tomorrow. */
     var rc=Logic.rides(cyc)[i],from=cyc[Math.max(0,i-6)].start;
@@ -278,8 +279,8 @@ var Forecast=(function(){
         '<dl class="ledger fp-sum" id="fp-sum"></dl>'+
       '</div></section>'+
       ui.pnl('fp-daily','Food per day','what you spent each day against your daily limit','<div class="fd-stats" id="fd-stats"></div><div class="fd-chart" id="fd-chart"></div>'+
-        '<div class="legend sm"><span><i class="sw c1"></i>Food spent</span><span><i class="sw fd-oversw"></i>Over the limit</span><span><i class="sw fd-limsw"></i>Daily limit</span><span><i class="sw fd-usesw"></i>Your usual</span></div>',
-        {cls:'',tools:'<div class="seg sm" role="group" aria-label="Days shown"><button type="button" data-frange="cycle" aria-pressed="'+(load().frange!=='60')+'">This cycle</button><button type="button" data-frange="60" aria-pressed="'+(load().frange==='60')+'">Last 60 days</button></div>'})+
+        '<div class="legend sm"><span><i class="sw c1"></i>Food spent</span><span><i class="sw fd-oversw"></i>Over the limit</span><span><i class="sw fd-limsw"></i>Daily limit</span><span><i class="sw fd-usesw"></i>Your usual</span><span><i class="sw fd-ghostsw"></i>Compared cycle, same day</span></div>',
+        {cls:'',tools:fcmpPick()+'<div class="seg sm" role="group" aria-label="Days shown"><button type="button" data-frange="cycle" aria-pressed="'+(load().frange!=='60')+'">This cycle</button><button type="button" data-frange="60" aria-pressed="'+(load().frange==='60')+'">Last 60 days</button></div>'})+
       '</div>'+
       // two columns that stack on their own, so a short card leaves no gap beside a tall one
       '<div class="fp-grid"><div class="fp-col">'+
@@ -326,6 +327,7 @@ var Forecast=(function(){
     }
     root.addEventListener('input',function(e){
       var t=e.target,o=t.closest('[data-out]'),pl=t.closest('[data-plan]'),lb=t.closest('[data-lab]');
+      if(t.hasAttribute('data-fcmp')){s.fcmp=t.value;save();update();return;}
       if(lb||t.dataset.labm){s.lab=labIn();if(lb) s.lab[lb.dataset.lab]=+t.value;else s.lab[t.dataset.labm]=t.dataset.labm==='salFrom'?+t.value:t.value;save();drawLab();return;}
       if(o){
         var ov=amt(t.value);
@@ -396,7 +398,7 @@ var Forecast=(function(){
         inp.value=u.toLocaleString('en-US');if(pd) pd.value=Math.round(u/R.days).toLocaleString('en-US');
         s[box.dataset.cap+'Cap']=u;save();update();
       }
-      else if(t.dataset.frange){s.frange=t.dataset.frange;save();$$('[data-frange]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});update();}
+      else if(t.dataset.frange){s.frange=t.dataset.frange;save();$$('[data-frange]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});var fc=$('.fd-cmp',root);if(fc) fc.hidden=s.frange==='60';update();}
       else if(t.dataset.level){s.level=t.dataset.level;save();$$('[data-level]',root).forEach(function(x){x.setAttribute('aria-pressed',String(x===t));});update();}
       else if(t.dataset.olfs!=null){setOlFS(t.dataset.olfs==='1');}
       else if(t.hasAttribute('data-labreset')){s.lab=Object.assign({},LAB0);save();$$('[data-lab] input',root).forEach(function(x){x.value=s.lab[x.closest('[data-lab]').dataset.lab];});$$('[data-labm]',root).forEach(function(x){x.value=x.dataset.labm==='salFrom'?'0':'';});drawLab();}
@@ -491,24 +493,41 @@ var Forecast=(function(){
 
 
   // ---------------------------------------------------------------- food per day
+  // which past cycle the ghost bars come from: the one you picked, else the cycle before this one
+  function fcmpCycle(){
+    var cs=R.food.cycles||[],k=load().fcmp;
+    if(k==='none'||!cs.length) return null;
+    return cs.filter(function(c){return c.key===k;})[0]||cs[0];
+  }
+  function fcmpPick(){
+    var cs=R.food.cycles||[];if(!cs.length) return '';
+    var c=fcmpCycle(),k=c?c.key:'none';
+    return '<label class="fd-cmp"'+(load().frange==='60'?' hidden':'')+'><span>Compare with</span><select class="inline lab-m" data-fcmp aria-label="Compare with">'+
+      '<option value="none"'+(k==='none'?' selected':'')+'>Nothing</option>'+
+      cs.map(function(x,j){return '<option value="'+x.key+'"'+(x.key===k?' selected':'')+'>'+esc(x.name)+(j===0?' (last cycle)':'')+'</option>';}).join('')+'</select></label>';
+  }
   function drawDaily(limit){
     var box=$('#fd-chart');if(!box) return;
     var F=R.food,cyc=load().frange!=='60',now=F.now;
     var a=cyc?R.cur.start:now-59,b=cyc?R.lastDay:now,n=b-a+1;
     var W=Math.max(280,box.clientWidth),H=W<520?180:200,pl=40,pr=10,pt=16,pb=24,iw=W-pl-pr,ih=H-pt-pb;
-    var usual=R.usual.food,mx=usual;
+    var usual=R.usual.food,mx=usual,G=cyc?fcmpCycle():null,ghost=function(i){if(!G) return null;var gd=G.start+i;return gd<=G.end?(F.byDay[gd]||0):null;};
     for(var d=a;d<=Math.min(b,now);d++) mx=Math.max(mx,F.byDay[d]||0);
+    if(G) for(var gi=0;gi<n;gi++) mx=Math.max(mx,ghost(gi)||0);
     if(limit>0) mx=Math.max(mx,limit);
     // round gridlines: a nice step, four or so of them
     var stp=Viz.niceMax(mx*1.1/4),nt=Math.ceil(mx*1.1/stp),top=stp*nt,Y=function(v){return pt+ih*(1-v/top);},bw=iw/n,gap=Math.min(2,bw*0.25);
     var g='';
     for(var t=0;t<=nt;t++){var v=stp*t;g+='<line class="ol-grid'+(t===0?' zero':'')+'" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+Y(v).toFixed(1)+'" y2="'+Y(v).toFixed(1)+'"/><text class="ol-ax" x="'+(pl-6)+'" y="'+(Y(v)+3.5).toFixed(1)+'" text-anchor="end">'+esc(K(v))+'</text>';}
-    var bars='',over=0,spent=0,days=0,lab='',every=Math.max(1,Math.ceil(n*46/iw));
+    var bars='',ghosts='',over=0,spent=0,days=0,lab='',every=Math.max(1,Math.ceil(n*46/iw));
     for(var i=0;i<n;i++){
       var day=a+i,x=pl+i*bw,v2=F.byDay[day]||0,past=day<=now,isOver=past&&limit>0&&v2>limit;
       // days with nothing logged at all are gaps in the record, not days without food
       if(past&&(F.logged[day]||v2)){days++;spent+=v2;if(isOver) over++;}
-      var tip=fmtDay(day)+(day===now?' (today)':'')+'\n'+(!past?'Still to come':v2?'Food '+fmt(v2)+(limit>0?(isOver?', '+fmt(v2-limit)+' over the limit':', '+fmt(limit-v2)+' under the limit'):'')+'\n'+(F.items[day]||[]).slice(0,4).join('\n'):F.logged[day]?'No food logged':'Nothing logged this day');
+      var gv=ghost(i);
+      var tip=fmtDay(day)+(day===now?' (today)':'')+'\n'+(!past?'Still to come':v2?'Food '+fmt(v2)+(limit>0?(isOver?', '+fmt(v2-limit)+' over the limit':', '+fmt(limit-v2)+' under the limit'):'')+'\n'+(F.items[day]||[]).slice(0,4).join('\n'):F.logged[day]?'No food logged':'Nothing logged this day')+
+        (gv!=null?'\n'+G.name+', day '+(i+1)+' ('+fmtDay(G.start+i)+'): '+(gv?fmt(gv):'no food logged'):'');
+      if(gv) ghosts+='<rect class="fd-ghost" x="'+(x+gap/2).toFixed(1)+'" y="'+Y(gv).toFixed(1)+'" width="'+Math.max(1,bw-gap).toFixed(1)+'" height="'+(pt+ih-Y(gv)).toFixed(1)+'" rx="'+Math.min(3,bw/4).toFixed(1)+'"/>';
       if(past&&v2>0) bars+='<rect class="fd-bar'+(isOver?' over':'')+(day===now?' now':'')+'" x="'+(x+gap/2).toFixed(1)+'" y="'+Y(v2).toFixed(1)+'" width="'+Math.max(1,bw-gap).toFixed(1)+'" height="'+(pt+ih-Y(v2)).toFixed(1)+'" rx="'+Math.min(3,bw/4).toFixed(1)+'"/>';
       else if(!past) bars+='<rect class="fd-future" x="'+(x+gap/2).toFixed(1)+'" y="'+(pt+ih-2)+'" width="'+Math.max(1,bw-gap).toFixed(1)+'" height="2"/>';
       bars+='<rect class="fd-hit" data-tip="'+esc(tip)+'" x="'+x.toFixed(1)+'" y="'+pt+'" width="'+bw.toFixed(1)+'" height="'+ih+'"/>';
@@ -516,10 +535,13 @@ var Forecast=(function(){
     }
     var lines='<line class="fd-use" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+Y(usual).toFixed(1)+'" y2="'+Y(usual).toFixed(1)+'"/>';
     if(limit>0) lines+='<line class="fd-lim" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+Y(limit).toFixed(1)+'" y2="'+Y(limit).toFixed(1)+'"/><text class="fd-limt" x="'+(W-pr)+'" y="'+(Y(limit)-4).toFixed(1)+'" text-anchor="end">Limit '+esc(fmt(limit))+'</text>';
-    box.innerHTML='<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Food spent per day against the daily limit">'+g+bars+lines+lab+'</svg>';
+    box.innerHTML='<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Food spent per day against the daily limit">'+g+bars+ghosts+lines+lab+'</svg>';
     var st=(cyc?'This cycle: ':'Last 60 days: ')+fmt(spent)+' on food, '+fmt(spent/Math.max(1,days))+' a day over the '+days+(days===1?' day':' days')+' you logged';
     st+=limit>0?' · over your '+fmt(limit)+' limit on '+over+' of them':' · set a food limit to compare';
     if(cyc) st+=' · '+R.days+(R.days===1?' day':' days')+' left, today included';
+    // the comparison cycle up to the same day of its cycle
+    if(G){var upto=Math.min(n,now-a+1),gs=0;for(var gk=0;gk<upto;gk++) gs+=ghost(gk)||0;
+      st+=' · '+G.name+' by day '+upto+': '+fmt(gs)+(gs>0?' ('+(spent>=gs?'+':'\u2212')+fmt(Math.abs(spent-gs))+' now)':'');}
     $('#fd-stats').textContent=st;
   }
 
