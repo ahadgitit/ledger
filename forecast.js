@@ -458,13 +458,13 @@ var Forecast=(function(){
     var row=function(t,v,cls){return '<div'+(cls?' class="'+cls+'"':'')+'><dt>'+esc(t)+'</dt><dd>'+v+'</dd></div>';},neg=function(v){return '−'+esc(fmt(v));};
     $('#fp-sum').innerHTML=
       row('Remaining (column G)',esc(fmtS(R.remaining)))+
+      row('Left for '+what,C.left==null?'–':esc(fmtS(C.left)),'tot fp-lead-row'+(C.left!=null&&C.left<0?' neg':''))+
       (C.advIn?row('Advances already logged, paid from Pay myself','+'+esc(fmt(C.advIn))):'')+
       row('Bills still to pay',neg(C.bills))+
       row('Monthly essentials',neg(C.ess))+
       row('InDrive (predicted, '+R.ride.days+' days)',neg(C.ride))+
       (food||C.cap==null?row('Your '+capWhat+' cap',C.cap==null?'<span class="fp-miss">not set</span>':neg(C.cap))
         :row('Food: '+fmt(C.dayLimit)+' a day \u00d7 '+d+' days'+(C.foodToday?', less '+fmt(C.foodToday)+' already spent today':''),neg(C.need)))+
-      row('Left for '+what,C.left==null?'–':esc(fmtS(C.left)),'tot'+(C.left!=null&&C.left<0?' neg':''))+
       row('Pay myself (as in the sheet)'+(C.adv?'; the '+fmt(C.adv)+' advance comes back next payday':''),esc(fmt(C.kept)))+
       (C.rec!==C.kept?row('Recommended Pay myself, to cover a '+fmt(C.short)+' shortfall'+(C.foodNeed>0?' (with your usual '+fmt(C.foodNeed)+' of food to payday)':''),esc(fmt(C.rec)),'tot fp-rec'):'');
     $('#fp-bills-t').textContent=fmt(C.bills);
