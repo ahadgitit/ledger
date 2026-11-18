@@ -268,6 +268,7 @@ var Forecast=(function(){
     };
     var result=function(which){return '<div class="fp-pred"><span class="lbl">Predicted '+(which==='food'?'food':'shopping')+' budget</span><b id="fp-pred"></b><small id="fp-pred-d"></small></div>';};
     return '<div class="plan" id="fp">'+cycAsk(M)+cfPrompt()+
+      '<div class="fp-toprow">'+
       '<section class="pnl m-hero fp-hero" id="fp-hero"><div class="pnl-b">'+
         '<div class="fp-top"><div class="m-q">Can your Pay myself of <b>'+esc(fmt(R.saved))+'</b> stay untouched until '+esc(until)+'?</div>'+
           '<div class="fp-mode"><span class="lbl">Predict</span><div class="seg" role="group" aria-label="What to predict"><button type="button" data-pmode="food" aria-pressed="'+foodMode+'">Food</button><button type="button" data-pmode="shop" aria-pressed="'+!foodMode+'">Shopping</button></div></div></div>'+
@@ -275,10 +276,11 @@ var Forecast=(function(){
         '<div class="m-k" id="fp-ans-k"></div><div class="m-big" id="fp-ans"></div><div class="m-day" id="fp-ans-d"></div>'+
         '<p class="m-lead" id="fp-lead"></p>'+
         '<dl class="ledger fp-sum" id="fp-sum"></dl>'+
-      '</div></section>'+labView()+
+      '</div></section>'+
       ui.pnl('fp-daily','Food per day','what you spent each day against your daily limit','<div class="fd-stats" id="fd-stats"></div><div class="fd-chart" id="fd-chart"></div>'+
         '<div class="legend sm"><span><i class="sw c1"></i>Food spent</span><span><i class="sw fd-oversw"></i>Over the limit</span><span><i class="sw fd-limsw"></i>Daily limit</span><span><i class="sw fd-usesw"></i>Your usual</span></div>',
         {cls:'',tools:'<div class="seg sm" role="group" aria-label="Days shown"><button type="button" data-frange="cycle" aria-pressed="'+(load().frange!=='60')+'">This cycle</button><button type="button" data-frange="60" aria-pressed="'+(load().frange==='60')+'">Last 60 days</button></div>'})+
+      '</div>'+
       // two columns that stack on their own, so a short card leaves no gap beside a tall one
       '<div class="fp-grid"><div class="fp-col">'+
       ui.pnl('fp-food','Food','what you spent each month',
@@ -303,7 +305,7 @@ var Forecast=(function(){
         '<p>Predict food: your shopping cap is taken off too, and what is left is for food. Predict shopping: your food cap is taken off, and what is left is for shopping.</p>'+
         '<p>An advance to Touheed or Mama is paid out of Pay myself: lower Pay myself in the sheet when you pay it. It does not touch this budget, and at the next payday you owe that much less, which the savings outlook counts as saved. If you also logged the advance as an entry, Remaining went down by it, so it is added back here.</p>'+
         '<p>What you enter here is kept in this browser.</p></details>'+
-      cfView(M)+outlookView()+planView()+
+      cfView(M)+labView()+outlookView()+planView()+
     '</div>';
   }
 

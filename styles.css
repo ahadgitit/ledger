@@ -1048,3 +1048,8 @@ html.ol-fs-open,html.ol-fs-open body{overflow:hidden}
 .bal-off-r b:last-child{color:var(--ink)}
 .bal-off-r.ok b:last-child{color:var(--good)}
 .bal-off small.ok{color:var(--good);font-size:12px}
+
+/* forecast: the budget card and Food per day side by side */
+.fp-toprow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:stretch}
+.fp-toprow>.pnl{margin:0;min-width:0}
+@media (max-width:980px){.fp-toprow{grid-template-columns:minmax(0,1fr)}}
