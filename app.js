@@ -58,6 +58,7 @@
     if(c==='popup_failed') return 'The Google sign-in window could not open. Allow pop-ups for this site, then press Sign in.';
     if(c==='auth'||c==='unauthorized') return 'Your Google sign-in has expired or was refused. Press Sign in.';
     if(c==='forbidden') return 'Google refused access to the sheet. Sign out, then sign in again with the Google account that owns the Monthly Expense Tracking sheet and allow it to see and edit your spreadsheets.';
+    if(c==='bad_request') return 'Google Sheets refused the change: '+(e.message||'bad request')+'. Press Refresh and try again.';
     if(c==='not_found') return 'The sheet or its Tracking tab was not found. Check the sheet ID in config.js and that the tab is still named Tracking.';
     if(c==='rate_limited'||c==='upstream_error'||c==='network') return 'Google Sheets did not answer. '+(S.tracking?'Showing the last saved copy. ':'')+'Press Refresh to try again.';
     return 'The sheet could not be loaded ('+(c||(e&&e.message)||'unknown error')+'). Press Refresh to try again.';
@@ -123,12 +124,26 @@
         return r.json().catch(function(){return {};}).then(function(j){
           var s=r.status;
           var er=new Error((j.error&&j.error.message)||('HTTP '+s));
-          er.code=s===401?'unauthorized':s===403?'forbidden':s===404||s===400?'not_found':s===429?'rate_limited':s>=500?'upstream_error':'http_'+s;
+          er.code=s===401?'unauthorized':s===403?'forbidden':s===404||(s===400&&/parse range/i.test(er.message))?'not_found':s===400?'bad_request':s===429?'rate_limited':s>=500?'upstream_error':'http_'+s;
           er.retryable=s===429||s>=500;
           if(er.code==='unauthorized') dropToken();
           throw er;
         });
       });
+  }
+  /* A tab only has so many rows (a new sheet has 1,000); writing past the last one is refused. Before a write,
+     any tab it reaches beyond its last row gets more rows added at the bottom, 500 to spare. */
+  function lastRow(range){var m=/!(?:[A-Z]+)?(\d+)(?::(?:[A-Z]+)?(\d+))?$/.exec(range||'');return m?+(m[2]||m[1]):0;}
+  function growFor(ranges){
+    var need={};
+    ranges.forEach(function(r){var t=String(r).split('!')[0].replace(/^'|'$/g,''),n=lastRow(r);if(t&&n>(need[t]||0)) need[t]=n;});
+    if(!Object.keys(need).length) return Promise.resolve();
+    return api('?fields='+encodeURIComponent('sheets.properties(sheetId,title,gridProperties.rowCount)')).then(function(j){
+      var req=[];
+      (j.sheets||[]).forEach(function(x){var p=x.properties,n=need[p.title],have=p.gridProperties&&p.gridProperties.rowCount||0;
+        if(n&&n>have) req.push({appendDimension:{sheetId:p.sheetId,dimension:'ROWS',length:n-have+500}});});
+      return req.length?api(':batchUpdate',{method:'POST',body:{requests:req}}):null;
+    });
   }
   function getValues(range,signal,render){
     return api('/values/'+encodeURIComponent(range)+(render?'?valueRenderOption='+render:''),{signal:signal}).then(function(j){return Array.isArray(j.values)?j.values:[];});
@@ -205,8 +220,8 @@
     },
     signOut:signOut,configure:configure,save:save,
     get:function(range,render){return getValues(range,undefined,render);},
-    put:function(range,values){return api('/values/'+encodeURIComponent(range)+'?valueInputOption=RAW',{method:'PUT',body:{range:range,majorDimension:'ROWS',values:values}});},
-    batch:function(data,input){return api('/values:batchUpdate',{method:'POST',body:{valueInputOption:input||'RAW',data:data}});},
+    put:function(range,values){return growFor([range]).then(function(){return api('/values/'+encodeURIComponent(range)+'?valueInputOption=RAW',{method:'PUT',body:{range:range,majorDimension:'ROWS',values:values}});});},
+    batch:function(data,input){return growFor(data.map(function(d){return d.range;})).then(function(){return api('/values:batchUpdate',{method:'POST',body:{valueInputOption:input||'RAW',data:data}});});},
     clear:function(range){return api('/values/'+encodeURIComponent(range)+':clear',{method:'POST',body:{}});},
     // tab ids and structural requests (formatting a new month like the last one)
     tabs:function(){return api('?fields='+encodeURIComponent('sheets.properties(sheetId,title)')).then(function(j){return (j.sheets||[]).map(function(x){return x.properties;});});},
